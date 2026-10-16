@@ -1,7 +1,9 @@
 # Genius Kids Academy
 
 A learning app for kids from Kindergarten to Grade 6: Reading, Math and Science, 20 levels per subject for every grade (420 levels in all),
-with four ways to practice every word (I Read, I Speak, I Listen, I Write) plus stories, lessons and quizzes. Each kid gets a profile with a name,
+with four ways to practice every word (I Read, I Speak, I Listen, I Write) plus two stories per level, lessons with ten questions and twenty fresh math problems per run.
+Every lesson mixes exercise types: flash cards with pictures, picture match, fill in the blank, match the pairs, unscramble, dictation, sentence building, letter tracing and read-aloud.
+Rewards like Duolingo: hearts, gems, daily quests, badges, treasure chests on the path, a weekly leaderboard between the kids on the device and a streak freeze. Each kid gets a profile with a name,
 avatar and grade, and their own progress. Duolingo-style path and lessons, no account, no API key, no cost. Works offline after the first load.
 
 ## Run it
@@ -43,11 +45,30 @@ change grade at any time; progress is kept separately for each kid and each grad
 PIN 1234 at first (change it in settings). Shows minutes per day, each subject's level, weakest mode, words to practice together,
 and settings: pass mark, mic strictness, reading voice and speed, daily goals, sounds, theme, child's name and avatar.
 Backup copies all progress as text; Restore pastes it back on another device.
+Parents can also switch hearts off (unlimited tries) and choose how many math problems a lesson has.
+
+## Rewards
+
+- **Hearts:** five per kid. A wrong first answer costs one; they come back one every 15 minutes, or all at once after practicing a passed level or My Words, or for 30 gems.
+- **Gems:** earned from daily quests (+5), new badges (+5) and treasure chests (+10). Spend them on a heart refill (30) or a streak freeze (40), which keeps the streak alive through one missed day.
+- **Daily quests:** three a day (stars, lessons, perfect scores, speaking, spelling, stories, math, science, minutes). Claiming one gives 10 stars and 5 gems.
+- **Treasure chests:** one after every unit of five levels on the path. It opens once the fifth level is passed: +25 stars, +10 gems.
+- **Badges:** 18 of them, from First steps to Road done, shown on the profile screen (tap the avatar).
+- **Leaderboard:** stars earned this week by every kid on the device.
+
+## Install it as an app (PWA)
+
+Serve the folder over http or https (not from a file) and the browser offers **Install app** (also on the profile and Parents pages). After the first visit the service worker keeps every file on the device, so the app opens and runs with no internet. `manifest.webmanifest` and `sw.js` hold the setup; run `node tools/build-sw.js` after adding files so the cache list and version stay current, and `node tools/make-icons.js` regenerates the icons.
+
+## Deploy
+
+The folder is a complete static site. Push it to GitHub and turn on GitHub Pages (Settings > Pages > Deploy from branch, main, root), or drop it on Netlify, Vercel or any web server. The `.nojekyll` file keeps Pages from touching the files.
 
 ## Files
 
 - `index.html` the app shell. `styles.css` the design (light and dark).
-- `content/reading-<grade>.js`, `content/science-<grade>.js`, `content/math-<grade>.js` hold the 20 levels per grade (`reading.js`, `math.js`, `science.js` are Grade 3). `content/math-lib.js` holds the math problem generators. Edit these to change words, stories, lessons or questions.
+- `content/reading-<grade>.js`, `content/science-<grade>.js`, `content/math-<grade>.js` hold the 20 levels per grade (`reading.js`, `math.js`, `science.js` are Grade 3). `content/extra-reading-<grade>.js` and `content/extra-science-<grade>.js` add ten more words, a second story, four more questions and a longer lesson to every level; `content/pictures.js` maps words to picture emoji. `content/math-lib.js` holds the math problem generators. Edit these to change words, stories, lessons or questions.
+- `js/rewards.js` hearts, gems, quests, badges, chests, shop and leaderboard.
 - `js/engine.js` builds decks and applies the star and review rules. `js/session.js` plays the cards. `js/views.js` the screens.
 - `js/speech.js` text to speech, speech recognition and sound effects. `js/util.js` forgiving speech matching.
 - `js/store.js` progress in the browser's local storage.
