@@ -23,9 +23,10 @@ window.GKA = window.GKA || {};
     if (pref === "anthropic" && k.anthropic) return "anthropic";
     if (k.anthropic) return "anthropic";
     if (k.openai) return "openai";
+    if (Speech.puterOK()) return "puter";
     return null;
   };
-  T.providerLabel = () => ({ "claude-app": "Claude AI", anthropic: "Claude AI", openai: "OpenAI" })[T.provider()] || "Built-in help";
+  T.providerLabel = () => ({ "claude-app": "Claude AI", anthropic: "Claude AI", openai: "OpenAI", puter: "Claude AI (free with Puter)" })[T.provider()] || "Built-in help";
 
   const SUBJECT = { reading: "Reading", math: "Math", science: "Science", understand: "Reading comprehension (Understand)" };
   const rules = () => {
@@ -139,6 +140,17 @@ window.GKA = window.GKA || {};
       if (!res.ok) throw await httpError(res);
       return readSSE(res, (d) => d.choices && d.choices[0] && d.choices[0].delta ? d.choices[0].delta.content || "" : "", onText, signal);
     }
+    if (p === "puter") {
+      const resp = await window.puter.ai.chat([{ role: "system", content: sys }].concat(history), { model: "claude-sonnet-4-6", stream: true, signal });
+      let text = "";
+      for await (const part of resp) {
+        if (signal && signal.aborted) throw { code: "cancelled", text };
+        if (part && part.type === "error") throw { message: part.message || "Puter error" };
+        const d = part && typeof part.text === "string" && (!part.type || part.type === "text") ? part.text : "";
+        if (d) { text += d; onText(text); }
+      }
+      return text;
+    }
     return null;
   }
   T.test = async () => { const t = await callAI([{ role: "user", content: "Say hello to me in one short, friendly sentence." }], () => {}, null); if (!t) throw { message: "No AI is set up yet." }; return t; };
@@ -191,7 +203,9 @@ window.GKA = window.GKA || {};
     el.querySelector("#np-voice").innerHTML = UI.icon(voiceOn ? "volume" : "mute");
     el.querySelector("#np-voice").setAttribute("aria-pressed", voiceOn ? "true" : "false");
   }
-  const speak = (t) => Speech.speak(String(t || "").replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, ""), { rate: settings().rate });
+  const speak = (t) => Speech.speak(String(t || "").replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, ""), { rate: settings().rate, patient: true });
+  // Tell the child once when the human voice has finished downloading.
+  window.addEventListener("gka-voice", (e) => { const d = e.detail || {}; if (d.state === "ready" && !T._toldVoice) { T._toldVoice = true; try { if (!localStorage.getItem("gka.voiceReady")) { localStorage.setItem("gka.voiceReady", "1"); UI.toast("Nova's human voice is ready!", "ok"); } } catch (x) { /* ignore */ } } });
   function readCard() {
     const sess = window.GKA.Session && window.GKA.Session.current ? window.GKA.Session.current() : null; const c = sess && sess.card;
     if (!c) { const main = document.querySelector("#app h1"); return speak(main ? main.textContent : greetFor()); }

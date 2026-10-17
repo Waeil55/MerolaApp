@@ -58,6 +58,7 @@ window.GKA = window.GKA || {};
   function boot() {
     Store.load();
     App.applyTheme();
+    Speech.boot();
     window.addEventListener("hashchange", render);
     const warm = () => { Speech.unlock(); if (Speech.ttsOK) { try { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); } catch (e) { /* ignore */ } } document.removeEventListener("pointerdown", warm); };
     document.addEventListener("pointerdown", warm);

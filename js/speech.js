@@ -50,26 +50,77 @@ window.GKA = window.GKA || {};
   };
 
   // ----- Which engine speaks -----
+  // auto (the default) uses the best one available: a parent's ElevenLabs or OpenAI key, a connected Puter account
+  // (free, signed in once), the free human voice that runs on this device (Kokoro), then the device's own voice.
   S.AI_VOICES = {
     openai: [["nova", "Nova (bright, friendly)"], ["coral", "Coral (warm)"], ["shimmer", "Shimmer (soft)"], ["sage", "Sage (calm)"], ["alloy", "Alloy (neutral)"], ["fable", "Fable (storyteller)"], ["echo", "Echo (deep)"], ["ash", "Ash (clear)"]],
-    elevenlabs: [["21m00Tcm4TlvDq8ikWAM", "Rachel (warm)"], ["EXAVITQu4vr4xnSDxMaL", "Sarah (soft)"], ["XrExE9yKIg1WjnnlVkGX", "Matilda (friendly)"], ["pFZP5JQG7iQjIQuC4Bku", "Lily (clear)"], ["TX3LPaxmHKxFdv7VOQHJ", "Liam (bright)"], ["onwK4e9ZLuTAKqWW03F9", "Daniel (calm)"]]
+    elevenlabs: [["21m00Tcm4TlvDq8ikWAM", "Rachel (warm)"], ["EXAVITQu4vr4xnSDxMaL", "Sarah (soft)"], ["XrExE9yKIg1WjnnlVkGX", "Matilda (friendly)"], ["pFZP5JQG7iQjIQuC4Bku", "Lily (clear)"], ["TX3LPaxmHKxFdv7VOQHJ", "Liam (bright)"], ["onwK4e9ZLuTAKqWW03F9", "Daniel (calm)"]],
+    kokoro: [["af_heart", "Heart (warm, friendly)"], ["af_bella", "Bella (bright)"], ["af_nova", "Nova (clear)"], ["af_sarah", "Sarah (gentle)"], ["am_michael", "Michael (calm)"], ["bf_emma", "Emma (British)"]]
   };
+  S.inFrame = (() => { try { return window.top !== window; } catch (e) { return true; } })();
+  S.kokoroOK = !S.inFrame && typeof Worker !== "undefined" && typeof WebAssembly !== "undefined" && /^https?:$/.test(location.protocol);
+  S.broken = {};
+  S.puterOK = () => { try { return !!(window.puter && window.puter.auth && window.puter.auth.isSignedIn()); } catch (e) { return false; } };
   S.engine = () => {
-    const e = settings().voiceEngine || "device"; const k = S.keys();
-    if (S.aiBroken) return "device";
-    if (e === "openai" && k.openai) return "openai";
-    if (e === "elevenlabs" && k.elevenlabs) return "elevenlabs";
+    const e = settings().voiceEngine || "auto"; const k = S.keys();
+    const has = { elevenlabs: !!k.elevenlabs, openai: !!k.openai, puter: S.puterOK(), kokoro: S.kokoroOK, device: true };
+    const order = e === "auto" ? ["elevenlabs", "openai", "puter", "kokoro", "device"] : [e, "kokoro", "device"];
+    for (const x of order) if (has[x] && !S.broken[x]) return x;
     return "device";
   };
-  S.engineLabel = () => ({ device: "Natural voice on this device", openai: "OpenAI AI voice", elevenlabs: "ElevenLabs AI voice" })[S.engine()];
+  S.engineLabel = () => ({ device: "Voice on this device", openai: "OpenAI AI voice", elevenlabs: "ElevenLabs AI voice", puter: "AI voice (Puter, ElevenLabs)", kokoro: "Free human AI voice (on this device)" })[S.engine()];
 
-  // ----- AI voice clips: memory, then the device cache, then the network -----
+  // ----- Free human voice on this device (Kokoro in a worker) -----
+  S.kokoro = { state: "idle", pct: 0 };
+  let kw = null, kBusy = null, kQueue = [], kSeq = 0;
+  const kEmit = () => { try { window.dispatchEvent(new CustomEvent("gka-voice", { detail: S.kokoro })); } catch (e) { /* old browser */ } };
+  function kPump() { if (kBusy || S.kokoro.state !== "ready" || !kQueue.length) return; kBusy = kQueue.shift(); kw.postMessage({ type: "gen", id: kBusy.id, text: kBusy.text, voice: kBusy.voice }); }
+  S.kokoroStart = () => {
+    if (kw || !S.kokoroOK) return;
+    try { kw = new Worker("js/tts-worker.js", { type: "module" }); } catch (e) { S.kokoro.state = "failed"; S.broken.kokoro = true; kEmit(); return; }
+    S.kokoro.state = "loading"; const files = {}; kEmit();
+    kw.onmessage = (ev) => {
+      const m = ev.data || {};
+      if (m.type === "progress") { files[m.file] = [m.loaded, m.total]; let a = 0, b = 0; Object.values(files).forEach(([x, y]) => { a += x; b += y; }); S.kokoro.pct = b ? Math.round((a / b) * 100) : 0; kEmit(); }
+      else if (m.type === "ready") { S.kokoro.state = "ready"; S.kokoro.pct = 100; kEmit(); kPump(); }
+      else if (m.type === "error") { S.kokoro.state = "failed"; S.kokoro.error = m.message; S.broken.kokoro = true; kEmit(); kQueue.forEach((j) => j.reject(new Error(m.message))); kQueue = []; }
+      else if (m.type === "clip" || m.type === "clip-error") { const j = kBusy; kBusy = null; if (j) { if (m.type === "clip") j.resolve(m.blob); else j.reject(new Error(m.message)); } kPump(); }
+    };
+    kw.onerror = () => { S.kokoro.state = "failed"; S.broken.kokoro = true; kEmit(); };
+    // A computer with a graphics card gets the fast WebGPU model; phones and tablets get the small model (about 90 MB).
+    const desktop = !/Mobi|Android|iPhone|iPad|Tablet/i.test(navigator.userAgent); const gpu = !!navigator.gpu && desktop && (navigator.deviceMemory || 8) >= 8;
+    kw.postMessage({ type: "load", device: gpu ? "webgpu" : "wasm", dtype: gpu ? "fp32" : "q8" });
+  };
+  const kokoroGen = (text, voice, urgent) => { S.kokoroStart(); return new Promise((resolve, reject) => { const job = { id: ++kSeq, text, voice, resolve, reject }; if (urgent) kQueue.unshift(job); else { if (kQueue.length > 60) kQueue.shift(); kQueue.push(job); } kPump(); }); };
+
+  // ----- Puter (free account, signed in once by a grown-up): ElevenLabs voice and Claude for Nova -----
+  S.puterLoad = () => new Promise((resolve) => {
+    if (window.puter) return resolve(true); if (S.inFrame) return resolve(false);
+    const s = document.createElement("script"); s.src = "https://js.puter.com/v2/"; s.onload = () => resolve(true); s.onerror = () => resolve(false); document.head.appendChild(s);
+  });
+  S.puterConnect = async () => {
+    const ok = await S.puterLoad(); if (!ok || !window.puter) throw new Error("Could not reach Puter. Check the internet connection.");
+    if (!S.puterOK()) await window.puter.auth.signIn();
+    if (!S.puterOK()) throw new Error("Sign-in was not finished.");
+    if (window.GKA.Store) window.GKA.Store.setting("puter", true);
+    S.broken.puter = false; return true;
+  };
+  S.puterDisconnect = async () => { try { if (window.puter) await window.puter.auth.signOut(); } catch (e) { /* ignore */ } if (window.GKA.Store) window.GKA.Store.setting("puter", false); };
+
+  // ----- AI voice clips: memory, then the device cache, then the engine -----
   const memo = new Map(); const inflight = new Map();
   const CACHE = "gka-voice-v1";
   const hash = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36) + str.length.toString(36); };
   const clipKey = (eng, voice, text) => eng + "/" + voice + "/" + hash(text);
-  const aiVoice = (eng) => eng === "openai" ? (settings().aiVoice || "nova") : (settings().elevenVoice || "21m00Tcm4TlvDq8ikWAM");
-  async function fetchClip(eng, voice, text) {
+  const aiVoice = (eng) => eng === "openai" ? (settings().aiVoice || "nova") : eng === "kokoro" ? (settings().kokoroVoice || "af_heart") : (settings().elevenVoice || "21m00Tcm4TlvDq8ikWAM");
+  async function fetchClip(eng, voice, text, urgent) {
+    if (eng === "kokoro") return kokoroGen(text, voice, urgent);
+    if (eng === "puter") {
+      let a;
+      try { a = await window.puter.ai.txt2speech(text, { provider: "elevenlabs", model: "eleven_flash_v2_5", voice }); }
+      catch (e) { a = await window.puter.ai.txt2speech(text, { provider: "openai", model: "gpt-4o-mini-tts", voice: settings().aiVoice || "nova", instructions: "A warm, cheerful teacher reading to a child." }); }
+      const r = await fetch(a.src); return r.blob();
+    }
     const k = S.keys();
     let res;
     if (eng === "openai") {
@@ -82,7 +133,12 @@ window.GKA = window.GKA || {};
     if (!res.ok) { let msg = "HTTP " + res.status; try { const j = await res.json(); msg = (j.error && (j.error.message || j.error)) || (j.detail && (j.detail.message || j.detail)) || msg; } catch (e) { /* not json */ } throw new Error(String(msg)); }
     return res.blob();
   }
-  async function getClip(eng, text) {
+  const cachedClip = async (eng, text) => {
+    const key = clipKey(eng, aiVoice(eng), text); if (memo.has(key)) return memo.get(key);
+    try { if (window.caches) { const c = await caches.open(CACHE); const hit = await c.match("https://gka-voice.local/" + key); if (hit) { const obj = URL.createObjectURL(await hit.blob()); memo.set(key, obj); return obj; } } } catch (e) { /* no cache */ }
+    return null;
+  };
+  async function getClip(eng, text, urgent) {
     const voice = aiVoice(eng); const key = clipKey(eng, voice, text);
     if (memo.has(key)) return memo.get(key);
     if (inflight.has(key)) return inflight.get(key);
@@ -91,24 +147,25 @@ window.GKA = window.GKA || {};
       let blob = null;
       try { if (window.caches) { const c = await caches.open(CACHE); const hit = await c.match(url); if (hit) blob = await hit.blob(); } } catch (e) { /* no cache here */ }
       if (!blob) {
-        blob = await fetchClip(eng, voice, text);
-        try { if (window.caches) { const c = await caches.open(CACHE); await c.put(url, new Response(blob, { headers: { "Content-Type": "audio/mpeg" } })); } } catch (e) { /* cache full or blocked */ }
+        blob = await fetchClip(eng, voice, text, urgent);
+        try { if (window.caches) { const c = await caches.open(CACHE); await c.put(url, new Response(blob, { headers: { "Content-Type": blob.type || "audio/mpeg" } })); } } catch (e) { /* cache full or blocked */ }
       }
       const obj = URL.createObjectURL(blob); memo.set(key, obj);
-      if (memo.size > 400) { const first = memo.keys().next().value; URL.revokeObjectURL(memo.get(first)); memo.delete(first); }
+      if (memo.size > 500) { const first = memo.keys().next().value; URL.revokeObjectURL(memo.get(first)); memo.delete(first); }
       return obj;
     })();
     inflight.set(key, p);
     try { return await p; } finally { inflight.delete(key); }
   }
-  // Long texts are read in chunks of whole sentences, so the first sentence starts quickly while the next is fetched.
-  const chunksOf = (text) => {
-    const t = String(text).replace(/\s+/g, " ").trim(); if (t.length <= 240) return [{ t, at: 0 }];
+  // Long texts are read in chunks of whole sentences, so the first sentence starts quickly while the next is made.
+  const chunksOf = (text, max) => {
+    max = max || 240; const t = String(text).replace(/\s+/g, " ").trim(); if (t.length <= max) return [{ t, at: 0 }];
     const parts = t.match(/[^.!?]+[.!?]+["')\]]*\s*|[^.!?]+$/g) || [t]; const out = []; let cur = "", at = 0, pos = 0;
-    for (const p of parts) { if (cur && (cur + p).length > 240) { out.push({ t: cur.trim(), at }); at = pos; cur = ""; } cur += p; pos += p.length; }
+    for (const p of parts) { if (cur && (cur + p).length > max) { out.push({ t: cur.trim(), at }); at = pos; cur = ""; } cur += p; pos += p.length; }
     if (cur.trim()) out.push({ t: cur.trim(), at });
     return out;
   };
+  const chunkMax = (eng) => eng === "kokoro" ? 150 : 240;
   const audio = typeof Audio !== "undefined" ? new Audio() : null;
   if (audio) { audio.preload = "auto"; try { audio.preservesPitch = true; } catch (e) { /* old browser */ } }
   let token = 0; let pendingResolve = null;
@@ -131,14 +188,27 @@ window.GKA = window.GKA || {};
       const p = audio.play(); if (p && p.catch) p.catch(() => end(false));
     });
   }
+  const NOT_READY = "not-ready";
   async function speakAI(eng, text, opts) {
     const my = ++token;
-    const chunks = chunksOf(text);
-    let next = getClip(eng, chunks[0].t);
+    const chunks = chunksOf(text, chunkMax(eng));
+    if (eng === "kokoro") {
+      // Never make a child wait: a clip that is saved plays at once; one being made gets a short moment, otherwise
+      // the device voice speaks now and the human voice is kept ready for next time.
+      const ready = await cachedClip(eng, chunks[0].t);
+      if (!ready) {
+        if (S.kokoro.state !== "ready") { getClip(eng, chunks[0].t).catch(() => {}); throw new Error(NOT_READY); }
+        const first = getClip(eng, chunks[0].t, true); first.catch(() => {});
+        const wait = opts.patient ? 9000 : 1400;
+        const won = await Promise.race([first.then(() => true, () => false), new Promise((r) => setTimeout(() => r(false), wait))]);
+        if (!won) throw new Error(NOT_READY);
+      }
+    }
+    let next = getClip(eng, chunks[0].t, true);
     for (let i = 0; i < chunks.length; i++) {
       const url = await next;
       if (my !== token) return false;
-      if (i + 1 < chunks.length) { next = getClip(eng, chunks[i + 1].t); next.catch(() => {}); }
+      if (i + 1 < chunks.length) { next = getClip(eng, chunks[i + 1].t, true); next.catch(() => {}); }
       const ch = chunks[i];
       const ok = await playUrl(url, opts.rate, opts.onBoundary ? (f) => opts.onBoundary(Math.round(ch.at + f * ch.t.length)) : null, my);
       if (!ok || my !== token) return false;
@@ -172,7 +242,8 @@ window.GKA = window.GKA || {};
   }
 
   /* Speak text. Resolves true when it finished, false when stopped or failed.
-     opts: rate, pitch, voiceURI, engine ("device" to force the device voice), onBoundary(charIndex). */
+     opts: rate, pitch, voiceURI, engine (force one), patient (wait longer for the human voice, for teacher answers),
+     onBoundary(charIndex). */
   S.speak = async (text, opts) => {
     opts = opts || {};
     text = String(text || "").trim();
@@ -182,19 +253,31 @@ window.GKA = window.GKA || {};
     if (eng !== "device") {
       try { return await speakAI(eng, text, opts); }
       catch (e) {
-        S.lastError = (e && e.message) || "AI voice failed";
-        // A network or key problem: use the device voice for the rest of this visit instead of failing again.
-        if (!navigator.onLine || /401|403|invalid|key|unauthor|Failed to fetch|NetworkError|Load failed/i.test(S.lastError)) S.aiBroken = true;
+        const msg = (e && e.message) || "AI voice failed";
+        if (msg !== NOT_READY) {
+          S.lastError = msg;
+          // A network or key problem: use the next voice for the rest of this visit instead of failing again.
+          if (!navigator.onLine || /401|403|invalid|key|unauthor|Failed to fetch|NetworkError|Load failed|credit|quota|limit/i.test(msg)) S.broken[eng] = true;
+        }
       }
     }
     return speakDevice(text, opts);
   };
-  // Fetch AI clips ahead of time (the next card's words and sentences).
+  // Make AI clips ahead of time: the whole lesson for the voice on this device, the next cards for cloud voices.
   S.prefetch = (texts) => {
-    const eng = S.engine(); if (eng === "device" || !navigator.onLine) return;
-    (texts || []).filter(Boolean).slice(0, 6).forEach((t) => { const c = chunksOf(t)[0]; getClip(eng, c.t).catch(() => {}); });
+    const eng = S.engine(); if (eng === "device") return;
+    if (eng !== "kokoro" && !navigator.onLine) return;
+    const list = (texts || []).filter((t) => typeof t === "string" && t.trim()).slice(0, eng === "kokoro" ? 30 : 6);
+    list.forEach((t) => { const c = chunksOf(t, chunkMax(eng))[0]; getClip(eng, c.t).catch(() => {}); });
   };
-  S.test = async (eng, sample) => { S.aiBroken = false; S.lastError = ""; const t = sample || "Hi! I am Nova, your teacher. Let's learn something amazing today."; if (eng === "device") return speakDevice(t, {}); return speakAI(eng, t, {}); };
+  // Start the free human voice in the background once the app is open (not on a phone that asks to save data).
+  S.boot = () => {
+    const st = settings();
+    if (st.puter && !S.inFrame) S.puterLoad();
+    const saveData = navigator.connection && navigator.connection.saveData;
+    if (S.engine() === "kokoro" && !saveData) setTimeout(S.kokoroStart, 1200);
+  };
+  S.test = async (eng, sample) => { S.broken = {}; S.lastError = ""; const t = sample || "Hi! I am Nova, your teacher. Let's learn something amazing today."; if (eng === "device") return speakDevice(t, {}); return speakAI(eng, t, { patient: true }); };
   S.clearVoiceCache = async () => { memo.forEach((u) => URL.revokeObjectURL(u)); memo.clear(); try { if (window.caches) await caches.delete(CACHE); } catch (e) { /* ignore */ } };
   S.stop = () => {
     token++;

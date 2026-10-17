@@ -885,3 +885,14 @@ html[data-calm] *, html[data-calm] *::before, html[data-calm] *::after { animati
 .mem.up .mem-face, .mem.done .mem-face { display: flex; transform: none; animation: mem-flip .28s ease-out; }
 .mem.up .mem-back, .mem.done .mem-back { display: none; }
 @keyframes mem-flip { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.ai-status { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ai-status > div { padding: 10px 12px; border-radius: 14px; background: var(--surface-2); min-width: 0; }
+.ai-status b { display: block; font-size: 15px; overflow-wrap: anywhere; }
+.ai-keys summary { font-weight: 900; cursor: pointer; color: var(--blue-fg); }
+.wordpop { position: fixed; z-index: 70; background: var(--surface); border: 2px solid var(--line); border-radius: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, .18); padding: 10px; display: flex; flex-direction: column; gap: 8px; max-width: calc(100vw - 16px); }
+.wordpop .wp-w { font-weight: 900; font-size: 22px; text-align: center; }
+.wordpop .wp-b { display: flex; gap: 6px; }
+.wordpop .wp-b button { display: inline-flex; align-items: center; gap: 4px; padding: 8px 10px; border-radius: 12px; background: var(--blue-lt); color: var(--blue-fg); font-weight: 900; font-size: 14px; white-space: nowrap; }
+.wordpop .wp-b button svg { width: 18px; height: 18px; }
+.lib-text p, .lib-word b, .lib-word .small, .lib-q .lq { cursor: pointer; }
+[data-readall].on { background: var(--green-lt); border-color: var(--green); color: var(--green-fg); }

@@ -18,6 +18,7 @@ window.GKA = window.GKA || {};
     const deck = E.buildDeck(opts);
     st = Object.assign({}, opts, { deck, idx: 0, results: [], stars: 0, t0: Date.now(), root, cur: null, ring: null });
     saveResume();
+    try { Speech.prefetch(deck.flatMap(cardTexts)); } catch (e) { /* prefetch is optional */ }
     if (!deck.length) { root.innerHTML = '<div class="screen"><div class="empty">' + UI.icon("words") + '<div>Nothing to practice here yet.</div><a class="btn primary" href="#' + (opts.source === "mywords" ? "words" : "hub-" + opts.subject + "-" + opts.n) + '">Back</a></div></div>'; return; }
     renderFrame(); renderCard();
   };

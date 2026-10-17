@@ -125,7 +125,39 @@ window.GKA = window.GKA || {};
   const cardsOf = (subject, L) => (L.words || []).map((w) => ({ w: w.w, s: w.s, pic: E.pictureFor(w.w) })).concat((L.vocab || []).map((v) => ({ w: v[0], pic: v[1] }))).concat((L.sort || []).map((v) => ({ w: v[0], pic: v[1], s: v[0] + " is a " + v[2] + " word." })));
   const levelTools = (subject, L) => {
     const unlocked = Store.isUnlocked(subject, L.n); const cards = cardsOf(subject, L).length;
-    return '<div class="lib-tools">' + (cards ? '<button class="btn" data-fc="' + L.n + '">' + UI.icon("cards") + " Flashcards</button>" : "") + (unlocked ? '<a class="btn soft-blue" href="#hub-' + subject + "-" + L.n + '">' + UI.icon("play") + " Practice this level</a>" : "") + '<button class="btn" data-nova-lv="' + L.n + '">' + UI.icon("chat") + " Ask Nova</button></div>";
+    return '<div class="lib-tools">' + (cards ? '<button class="btn" data-fc="' + L.n + '">' + UI.icon("cards") + " Flashcards</button>" : "") + (unlocked ? '<a class="btn soft-blue" href="#hub-' + subject + "-" + L.n + '">' + UI.icon("play") + " Practice this level</a>" : "") + '<button class="btn" data-readall="' + L.n + '">' + UI.icon("volume") + ' Read it to me</button><button class="btn" data-nova-lv="' + L.n + '">' + UI.icon("chat") + " Ask Nova</button></div>";
+  };
+
+  function wordAt(e) {
+    let node = null, off = 0;
+    if (document.caretRangeFromPoint) { const r = document.caretRangeFromPoint(e.clientX, e.clientY); if (r) { node = r.startContainer; off = r.startOffset; } }
+    else if (document.caretPositionFromPoint) { const p = document.caretPositionFromPoint(e.clientX, e.clientY); if (p) { node = p.offsetNode; off = p.offset; } }
+    if (!node || node.nodeType !== 3) return "";
+    const t = node.textContent; let a = off, b = off; const W = /[A-Za-z'\u2019-]/;
+    while (a > 0 && W.test(t[a - 1])) a--; while (b < t.length && W.test(t[b])) b++;
+    return t.slice(a, b).replace(/^['\u2019-]+|['\u2019-]+$/g, "");
+  }
+  function wordPop(word, x, y, context) {
+    const old = document.querySelector(".wordpop"); if (old) old.remove();
+    const el = document.createElement("div"); el.className = "wordpop"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "Word help");
+    el.innerHTML = '<div class="wp-w">' + esc(word) + '</div><div class="wp-b"><button data-a="hear">' + UI.icon("ear") + ' Hear</button><button data-a="mean">' + UI.icon("chat") + ' Meaning</button><button data-a="save">' + UI.icon("plus") + " My Words</button></div>";
+    document.body.appendChild(el);
+    const w = el.offsetWidth, h = el.offsetHeight; el.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, x - w / 2)) + "px"; el.style.top = (y + h + 24 > window.innerHeight ? y - h - 14 : y + 14) + "px";
+    const close = () => { el.remove(); document.removeEventListener("pointerdown", outside, true); window.removeEventListener("scroll", close, true); };
+    const outside = (ev) => { if (!el.contains(ev.target)) close(); };
+    setTimeout(() => { document.addEventListener("pointerdown", outside, true); window.addEventListener("scroll", close, true); }, 0);
+    el.querySelector('[data-a="hear"]').onclick = () => Speech.speak(word, { rate: Store.get().settings.rate });
+    el.querySelector('[data-a="mean"]').onclick = () => { close(); const T = window.GKA.Teacher; if (T) T.open({ prompt: 'What does the word "' + word + '" mean' + (context ? ' in this sentence: "' + context.slice(0, 220) + '"' : "") + "? Explain simply and give one example." }); };
+    el.querySelector('[data-a="save"]').onclick = () => { const ok = Store.addWord(word.toLowerCase(), "", "Library"); UI.toast(ok ? '"' + word + '" is in My Words' : '"' + word + '" is already in My Words', ok ? "ok" : "warn"); close(); };
+    Speech.speak(word, { rate: Store.get().settings.rate });
+  }
+  V._wordPop = wordPop; V._wordAt = wordAt;
+  // Read a whole level aloud: its lesson, words, stories or passages.
+  const readAllText = (subject, L0) => {
+    if (subject === "science") return L0.lesson;
+    if (subject === "reading") return (L0.words || []).map((w) => w.w + ". " + (w.s || "")).join(" ") + " " + (L0.stories || []).map((s) => s.title + ". " + s.text).join(" ");
+    if (subject === "understand") return (L0.items || []).map((it) => it.text ? (it.title ? it.title + ". " : "") + it.text : it.t || "").join(" ") || (L0.vocab || L0.sort || []).map((v) => v[0]).join(", ");
+    return L0.name + ". " + L0.skill;
   };
 
   V.library = (root, subject) => {
@@ -142,10 +174,16 @@ window.GKA = window.GKA || {};
       '<div class="lib-levels">' + levels.map((L) => '<details class="lib-level" data-n="' + L.n + '"><summary><span class="lib-n ' + tone + '">' + L.n + '</span><span class="grow"><b>' + esc(L.name) + '</b><span class="small muted">' + esc(countLabel(subject, L)) + "</span></span>" + '<button class="lib-save' + (isSaved(subject, L.n) ? " on" : "") + '" data-save="' + L.n + '" aria-label="Save level ' + L.n + '" aria-pressed="' + isSaved(subject, L.n) + '">' + UI.icon("heart") + "</button>" + UI.icon("chev") + '</summary><div class="lib-body"></div></details>').join("") + "</div></div>" + V._bottomNav("library");
     V._bindGrade(root);
     const rate = Store.get().settings.rate;
+    if (!root._wordTap) root._wordTap = true, root.addEventListener("click", (e) => {
+      const p = e.target.closest(".lib-text p, .lib-word .small, .lib-q .lq, .lib-word b");
+      if (!p || e.target.closest("button")) return;
+      const w = wordAt(e); if (w && w.length > 1) wordPop(w, e.clientX, e.clientY, p.textContent);
+    });
     const bindBody = (el) => {
       el.querySelectorAll("[data-say]").forEach((b) => { b.onclick = (e) => { e.preventDefault(); Speech.speak(b.dataset.say, { rate }); }; });
       el.querySelectorAll("[data-ans]").forEach((b) => { b.onclick = () => { b.outerHTML = '<div class="lib-answer">' + UI.icon("check") + " " + esc(b.dataset.ans) + "</div>"; }; });
       el.querySelectorAll("[data-fc]").forEach((b) => { b.onclick = () => { const L = E.level(subject, +b.dataset.fc); flashcards(cardsOf(subject, L), "Level " + L.n + ": " + L.name); }; });
+      el.querySelectorAll("[data-readall]").forEach((b) => { b.onclick = () => { if (b.classList.contains("on")) { Speech.stop(); b.classList.remove("on"); return; } b.classList.add("on"); Speech.speak(readAllText(subject, E.level(subject, +b.dataset.readall)), { rate, patient: true }).then(() => b.classList.remove("on")); }; });
       el.querySelectorAll("[data-nova-lv]").forEach((b) => { b.onclick = () => { if (window.GKA.Teacher) { window.GKA.Teacher.setFocus({ subject, n: +b.dataset.novaLv }); window.GKA.Teacher.open(); } }; });
       el.querySelectorAll("[data-more]").forEach((b) => { b.onclick = () => { const body = b.closest(".lib-body"); const L = E.level(subject, +b.dataset.more); body.innerHTML = levelTools(subject, L) + levelBody(subject, L); bindBody(body); }; });
     };
