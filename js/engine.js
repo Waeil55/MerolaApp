@@ -17,9 +17,10 @@ window.GKA = window.GKA || {};
   const gradeIndex = (g) => Math.max(0, GRADE_ORDER.indexOf(g || Store.grade()));
   const normWord = (x) => { if (typeof x === "string") return { w: x, h: "", s: "" }; if (Array.isArray(x)) return x.length >= 3 ? { w: x[0], h: x[1], s: x[2] } : { w: x[0], h: "", s: x[1] || "" }; return Object.assign({ h: "", s: "" }, x); };
   const registry = {};
+  E.meta = {};
   function build() {
     const parts = window.GKA.contentParts || [];
-    for (const part of parts) { if (part.extra) continue; registry[part.subject] = registry[part.subject] || {}; { const mapped = part.levels.map((L) => Object.assign({}, L, { words: (L.words || []).map(normWord), stories: L.story ? [L.story] : [] })); const cur = registry[part.subject][part.grade]; registry[part.subject][part.grade] = cur ? cur.concat(mapped).sort((a, b) => a.n - b.n) : mapped; } }
+    for (const part of parts) { if (part.extra) continue; registry[part.subject] = registry[part.subject] || {}; { const mapped = part.levels.map((L) => Object.assign({}, L, { words: (L.words || []).map(normWord), stories: L.stories || [L.story, L.story2].filter(Boolean) })); if (part.stages) (E.meta[part.subject] = E.meta[part.subject] || {})[part.grade] = { stages: part.stages }; const cur = registry[part.subject][part.grade]; registry[part.subject][part.grade] = cur ? cur.concat(mapped).sort((a, b) => a.n - b.n) : mapped; } }
     for (const part of parts) {
       if (!part.extra) continue;
       const levels = (registry[part.subject] || {})[part.grade]; if (!levels) continue;
@@ -36,7 +37,7 @@ window.GKA = window.GKA || {};
   build();
   E.subject = (id) => META[id] ? Object.assign({}, META[id], { grades: Object.keys(registry[id] || {}) }) : null;
   E.subjects = () => ["reading", "math", "science", "understand"].map(E.subject);
-  E.levels = (subject, grade) => (registry[subject] && registry[subject][subject === "understand" ? "all" : (grade || Store.grade())]) || [];
+  E.levels = (subject, grade) => (registry[subject] && registry[subject][grade || Store.grade()]) || [];
   E.level = (subject, n, grade) => E.levels(subject, grade).find((l) => l.n === n) || null;
   E.levelNames = (subject, grade) => E.levels(subject, grade).map((l) => ({ n: l.n, name: l.name, skill: l.skill }));
   E.hasGrade = (subject, grade) => !!(registry[subject] && registry[subject][grade]);
@@ -136,12 +137,13 @@ window.GKA = window.GKA || {};
     return deck;
   };
   function quizCard(q) {
-    if (q.t === "mc") return { type: "question", q: q.q, options: U.shuffle(q.o), answer: q.o[q.a], graded: true, word: q.q };
+    if (q.t === "mc") return { type: "question", q: q.q, options: U.shuffle(q.o), answer: q.o[q.a || 0], graded: true, word: q.q };
     if (q.t === "tf") return { type: "truefalse", q: q.q, answer: q.a, graded: true, word: q.q };
     return { type: "order", q: q.q, items: q.items, shuffled: U.shuffle(q.items), graded: true, word: q.q };
   }
   function buildMath(L, mode, size) {
     const deck = []; if (!L) return deck;
+    if (mode === "words" && L.wp) { const seen = new Set(); let guard = 0; while (deck.length < Math.min(size, 10) && guard++ < 100) { const p = L.wp(); if (seen.has(p.q)) continue; seen.add(p.q); deck.push({ type: "math", sub: "words", problem: Object.assign({ hint: "Read it twice. What is the question asking? Which numbers do you need?" }, p), graded: true, word: p.q }); } return deck; }
     if (mode === "words") { for (const wp of U.shuffle(L.words || [])) deck.push({ type: "math", sub: "words", problem: { q: wp.q, say: wp.q, answer: wp.answer, options: null, hint: "Read it twice. What is the question asking?", kind: "number" }, graded: true, word: wp.q }); return deck; }
     const seen = new Set(); let guard = 0;
     while (deck.length < size && guard++ < size * 8) { const p = L.gen(); const key = p.q + "|" + p.answer + "|" + JSON.stringify(p.visual || ""); if (seen.has(key)) continue; seen.add(key); deck.push({ type: "math", sub: mode, problem: p, graded: true, word: p.q }); }

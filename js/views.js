@@ -20,9 +20,9 @@ window.GKA = window.GKA || {};
   // ----- Understand helpers -----
   const understandTop = () => {
     const hp = Store.highestPassed("understand"); const cur = Store.currentLevel("understand"); const L = E.level("understand", cur); const stageNo = L ? L.stage : 1;
-    const ladder = '<div class="ladder" aria-label="Stage ' + stageNo + ' of 5">' + E.UNDERSTAND_STAGES.map((s, i) => '<div class="lstep' + (i + 1 < stageNo ? " done" : i + 1 === stageNo ? " on" : "") + '"><i>' + (i + 1 < stageNo ? UI.icon("check") : i + 1) + "</i><span>" + s + "</span></div>").join("") + "</div>";
+    const ladder = '<div class="ladder" aria-label="Stage ' + stageNo + ' of 5">' + E.stageNames().map((s, i) => '<div class="lstep' + (i + 1 < stageNo ? " done" : i + 1 === stageNo ? " on" : "") + '"><i>' + (i + 1 < stageNo ? UI.icon("check") : i + 1) + "</i><span>" + s + "</span></div>").join("") + "</div>";
     const suggest = { kg: 1, g1: 11, g2: 16, g3: 21, g4: 26, g5: 31, g6: 36 }[Store.grade()] || 1;
-    const place = !Store.placedAt("understand") && hp === 0 ? '<div class="place-card"><div class="row" style="align-items:flex-start"><span class="place-m">' + UI.mascot("wink") + '</span><div class="grow"><div class="t">Find my starting level</div><div class="small muted">Up to 10 quick questions. If you already understand words and sentences, you skip ahead.' + (suggest > 1 ? " Most " + Store.gradeName(Store.grade()) + " kids start near Level " + suggest + "." : "") + '</div></div></div><div class="row wrap"><a class="btn primary" href="#play-placement">Find my level</a><a class="btn flat" href="#hub-understand-1">Start at Level 1</a></div></div>' : "";
+    const place = !Store.placedAt("understand") && hp === 0 ? '<div class="place-card"><div class="row" style="align-items:flex-start"><span class="place-m">' + UI.mascot("wink") + '</span><div class="grow"><div class="t">Find my starting level</div><div class="small muted">Up to 10 quick questions. If you already know the early levels of this grade, you skip ahead.</div></div></div><div class="row wrap"><a class="btn primary" href="#play-placement">Find my level</a><a class="btn flat" href="#hub-understand-1">Start at Level 1</a></div></div>' : "";
     return '<div class="u-intro"><div class="u-intro-t">Understand what you read</div><div class="small muted">Five steps, from single words to long stories. Each step teaches how to find the answer in the text.</div>' + ladder + "</div>" + place;
   };
   const understandHubInfo = (L) => {
@@ -30,10 +30,10 @@ window.GKA = window.GKA || {};
     if (L.tip) add(L.tip); if (L.vocab) add("look"); if (L.sort) add("sort");
     (L.items || []).forEach((it) => { add(it.k); (it.qs || []).forEach((q) => add(q.k)); });
     const titles = (L.items || []).filter((it) => it.title && !it.notitle).map((it) => U.esc(it.title));
-    return '<div class="small muted">Stage ' + L.stage + " of 5 · " + E.UNDERSTAND_STAGES[L.stage - 1] + '</div><div class="chips" style="margin-top:8px">' + ks.map((k) => UI.qchip(k)).join("") + "</div>" + (titles.length ? '<div class="small muted" style="margin-top:8px">Read: ' + titles.join(", ") + "</div>" : "");
+    return '<div class="small muted">Stage ' + L.stage + " of 5 · " + E.stageNames()[L.stage - 1] + '</div><div class="chips" style="margin-top:8px">' + ks.map((k) => UI.qchip(k)).join("") + "</div>" + (titles.length ? '<div class="small muted" style="margin-top:8px">Read: ' + titles.join(", ") + "</div>" : "");
   };
   const placementResult = (root, r) => {
-    const p = r.placement || { start: 1, passed: 0 }; const stages = E.UNDERSTAND_STAGES;
+    const p = r.placement || { start: 1, passed: 0 }; const stages = E.stageNames();
     const gotList = stages.slice(0, p.passed).map((s) => s.toLowerCase()); const got = gotList.length > 1 ? gotList.slice(0, -1).join(", ") + " and " + gotList[gotList.length - 1] : gotList.join("");
     root.innerHTML = '<div class="screen"><div class="results"><svg class="mascot" viewBox="0 0 120 120">' + UI.mascot("wink").replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "") + "</svg><h1>Start at Level " + p.start + '</h1><div class="sub">' + (p.passed ? "You already understand " + got + ". Levels 1 to " + (p.start - 1) + " stay open for practice any time." : "We will start with words and pictures. Every step builds the next one.") + '</div><div class="ladder big" style="width:100%;margin-top:18px">' + stages.map((s, i) => '<div class="lstep' + (i < p.passed ? " done" : i === Math.min(p.passed, 4) ? " on" : "") + '"><i>' + (i < p.passed ? UI.icon("check") : i + 1) + "</i><span>" + s + "</span></div>").join("") + '</div></div><div class="stack" style="margin-top:22px"><a class="btn primary lg" href="#hub-understand-' + p.start + '">Start Level ' + p.start + '</a><a class="btn flat" href="#home-understand">Back to the path</a></div></div>';
   };
@@ -51,7 +51,7 @@ window.GKA = window.GKA || {};
     const b = root.querySelector("#gradebtn"); if (!b) return;
     b.onclick = () => {
       const g = Store.grade();
-      const m = UI.modal('<h2>Which grade?</h2><p class="muted small">Reading, Math and Science have 20 levels for each grade, saved separately. Understand is one 50-level path for every age.</p><div class="grade-pick" id="gp">' + E.GRADES.map(([id, name]) => '<button data-g="' + id + '" class="' + (id === g ? "on" : "") + '">' + Store.gradeShort(id) + "</button>").join("") + '</div><div class="small muted" id="gname">' + Store.gradeName(g) + "</div><button class=\"btn primary\" id=\"ok\">Done</button>");
+      const m = UI.modal('<h2>Which grade?</h2><p class="muted small">Every subject has its own 50 levels for each grade, and progress is saved separately for each grade.</p><div class="grade-pick" id="gp">' + E.GRADES.map(([id, name]) => '<button data-g="' + id + '" class="' + (id === g ? "on" : "") + '">' + Store.gradeShort(id) + "</button>").join("") + '</div><div class="small muted" id="gname">' + Store.gradeName(g) + "</div><button class=\"btn primary\" id=\"ok\">Done</button>");
       m.el.querySelectorAll("#gp button").forEach((x) => { x.onclick = () => { m.el.querySelectorAll("#gp button").forEach((y) => y.classList.remove("on")); x.classList.add("on"); m.el.querySelector("#gname").textContent = Store.gradeName(x.dataset.g); }; });
       m.el.querySelector("#ok").onclick = () => { const on = m.el.querySelector("#gp button.on"); if (on) Store.setGrade(on.dataset.g); m.close(); go("home"); };
     };
@@ -93,7 +93,7 @@ window.GKA = window.GKA || {};
     const offsets = [0, 50, 76, 50, 0, -50, -76, -50];
     let html = "";
     levels.forEach((l, i) => {
-      if (i % 5 === 0) { const unit = Math.floor(i / 5) + 1; const last = levels[Math.min(i + 4, levels.length - 1)]; html += '<div class="unit ' + tone + '"><div class="grow"><div class="u1">Unit ' + unit + " · Levels " + l.n + "–" + last.n + (subject === "understand" ? " · " + E.UNDERSTAND_STAGES[(l.stage || 1) - 1] : "") + '</div><div class="u2">' + U.esc(l.name) + " to " + U.esc(last.name) + '</div></div><button class="guide" data-unit="' + unit + '">' + UI.icon("book") + " Guide</button></div>"; html += '<div class="path">'; }
+      if (i % 5 === 0) { const unit = Math.floor(i / 5) + 1; const last = levels[Math.min(i + 4, levels.length - 1)]; html += '<div class="unit ' + tone + '"><div class="grow"><div class="u1">Unit ' + unit + " · Levels " + l.n + "–" + last.n + (subject === "understand" ? " · " + E.stageNames()[(l.stage || 1) - 1] : "") + '</div><div class="u2">' + U.esc(l.name) + " to " + U.esc(last.name) + '</div></div><button class="guide" data-unit="' + unit + '">' + UI.icon("book") + " Guide</button></div>"; html += '<div class="path">'; }
       const p = Store.levelPeek(subject, l.n); const done = !!(p && p.passed); const isCur = !done && l.n === cur; const locked = !done && !isCur;
       const off = offsets[i % offsets.length];
       const inner = (locked ? UI.icon("lock") : done ? UI.icon("crown") : UI.subjectIcon(subject)) + (done ? '<span class="stars-mini">' + [0, 1, 2].map((k) => UI.icons.star.replace("<svg", '<svg class="' + (k < p.stars ? "on" : "") + '"')).join("") + "</span>" : "") + (isCur ? '<span class="start-bubble ' + tone + '">Start</span>' : "");

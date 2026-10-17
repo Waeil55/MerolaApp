@@ -30,6 +30,8 @@ window.GKA = window.GKA || {};
       }
     } catch (e) { state = DEFAULTS(); }
     for (const pr of state.profiles) { if (!state.data[pr.id]) state.data[pr.id] = emptyProfileData(); if (!state.data[pr.id].rewards) state.data[pr.id].rewards = emptyRewards(); }
+    // Content v3: every grade has its own 50-level paths, so earlier level progress no longer lines up. Stars, gems and badges stay.
+    if ((state.contentV || 0) < 3) { for (const id in state.data) { state.data[id].subjects = {}; state.data[id].placed = {}; } state.contentV = 3; }
     return state;
   };
   Store.rewards = () => { const d = P(); if (!d.rewards) d.rewards = emptyRewards(); return d.rewards; };
@@ -72,7 +74,7 @@ window.GKA = window.GKA || {};
 
   // ----- levels (per subject and grade) -----
   // Understand is one path for every grade; the other subjects keep progress per grade.
-  const gk = (subject) => (subject === "understand" ? "all" : Store.grade());
+  const gk = () => Store.grade();
   Store.gradeKey = gk;
   const maxLv = (subject) => { const En = window.GKA.Engine; const n = En ? En.levels(subject).length : 0; return n || 20; };
   const subj = (subject, grade) => { const d = P(); const s = d.subjects[subject] || (d.subjects[subject] = {}); return s[grade || gk(subject)] || (s[grade || gk(subject)] = { levels: {} }); };
@@ -83,8 +85,8 @@ window.GKA = window.GKA || {};
   Store.currentLevel = (subject) => Math.min(maxLv(subject), Store.highestPassed(subject) + 1);
   Store.maxLevel = maxLv;
   // Placement opens every level below the start. Placed levels earn no stars and no chests.
-  Store.placeAt = (subject, start) => { for (let n = 1; n < start; n++) { const L = Store.level(subject, n); if (!L.passed) { L.passed = true; L.placed = true; } } const d = P(); d.placed = d.placed || {}; d.placed[subject] = start; Store.save(); };
-  Store.placedAt = (subject) => ((P().placed || {})[subject]) || 0;
+  Store.placeAt = (subject, start) => { for (let n = 1; n < start; n++) { const L = Store.level(subject, n); if (!L.passed) { L.passed = true; L.placed = true; } } const d = P(); d.placed = d.placed || {}; d.placed[subject + ":" + gk(subject)] = start; Store.save(); };
+  Store.placedAt = (subject) => ((P().placed || {})[subject + ":" + gk(subject)]) || 0;
   Store.passedCount = (subject) => { let c = 0; const lv = subj(subject).levels; for (const k in lv) if (lv[k].passed && !lv[k].placed) c++; return c; };
   Store.starsFor = (subject) => { let t = 0; const lv = subj(subject).levels; for (const k in lv) t += lv[k].stars || 0; return t; };
 

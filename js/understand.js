@@ -9,6 +9,8 @@ window.GKA = window.GKA || {};
   if (!E) return;
 
   E.UNDERSTAND_STAGES = ["Words", "Sentences", "Mini stories", "Paragraphs", "Long stories"];
+  // Each grade names its own five stages (content part "stages"); this is the fallback.
+  E.stageNames = (grade) => ((E.meta.understand || {})[grade || Store.grade()] || {}).stages || E.UNDERSTAND_STAGES;
 
   // Question types: chip label, icon, color, and the teaching text shown on tip cards and after a wrong answer.
   E.QTYPES = {
@@ -105,17 +107,17 @@ window.GKA = window.GKA || {};
     const plays = (Store.levelPeek("understand", L.n) || { plays: 0 }).plays;
     const deck = [];
     if (guided && L.tip && E.QTYPES[L.tip]) deck.push({ type: "u-tip", tip: L.tip, graded: false });
-    if (L.stage === 1) {
+    if (L.vocab || L.sort) {
       if (L.sort) { const items = guided ? rotate(L.sort, 8, plays) : U.shuffle(L.sort).slice(0, 10); for (const [w, p, k] of items) deck.push({ type: "u-sort", word: w, pic: p, answer: k, graded: true }); return deck; }
       if (guided) { const sel = rotate(L.vocab, 8, plays); for (let g = 0; g < sel.length; g += 4) { const grp = sel.slice(g, g + 4); for (const v of grp) deck.push({ type: "u-word", word: v[0], pic: v[1], graded: false }); for (const v of U.shuffle(grp)) deck.push(vocabCards(L, v, "wordpic")); } }
       else U.shuffle(L.vocab).slice(0, 8).forEach((v, i) => deck.push(vocabCards(L, v, ["wordpic", "picword", "listen"][i % 3])));
       return deck;
     }
-    if (L.stage === 2) { const items = guided ? rotate(L.items, 8, plays) : U.shuffle(L.items).slice(0, 8); for (const it of items) deck.push(sentenceCard(it, guided)); return deck; }
+    if (L.items && L.items.length && L.items[0].t) { const items = guided ? rotate(L.items, 8, plays) : U.shuffle(L.items).slice(0, 8); for (const it of items) deck.push(sentenceCard(it, guided)); return deck; }
     for (const it of L.items) {
       const passage = E.passageOf(it);
       const qs = it.qs.map((q) => Object.assign({}, q, { ev: q.e ? locate(passage.paras, q.e) : null }));
-      if (L.stage === 5 && guided && passage.paras.length > 1) {
+      if (guided && passage.paras.length > 1) {
         for (let p = 0; p < passage.paras.length; p++) {
           deck.push({ type: "u-read", passage, focus: p, upto: p, part: p + 1, parts: passage.paras.length, graded: false });
           for (const q of qs.filter((x) => x.ev && x.ev[0] === p)) deck.push(qCard(q, passage, { guided: true, upto: p, only: p, show: "open", stage: 5 }));
@@ -123,7 +125,7 @@ window.GKA = window.GKA || {};
         for (const q of qs.filter((x) => !x.ev)) deck.push(qCard(q, passage, { guided: true, show: "open", stage: 5 }));
       } else {
         deck.push({ type: "u-read", passage, graded: false });
-        const closed = !guided && L.stage >= 4;
+        const closed = !guided && passage.paras.flat().length >= 5;
         for (const q of qs) deck.push(qCard(q, passage, { guided, show: closed ? "closed" : "open", stage: L.stage }));
       }
     }
@@ -132,28 +134,29 @@ window.GKA = window.GKA || {};
 
   /* Placement check: two questions per stage, easiest first. The session stops at the first miss. */
   E.placementDeck = () => {
-    const lv = (n) => E.level("understand", n); const deck = [];
-    const l5 = lv(5), l8 = lv(8);
-    if (l5 && l8) { deck.push(Object.assign(vocabCards(l5, l5.vocab[2], "wordpic"), { probe: 1 })); deck.push(Object.assign(vocabCards(l8, l8.vocab[4], "wordpic"), { probe: 1 })); }
-    const l15 = lv(15); if (l15) for (const it of [l15.items[1], l15.items[3]]) deck.push(Object.assign(sentenceCard(it, false), { probe: 2 }));
-    const pass = (n, itemIdx, qIdx, stageNo, firstPara) => {
-      const L = lv(n); if (!L) return; const it = L.items[itemIdx]; let passage = E.passageOf(it); if (firstPara) passage = Object.assign({}, passage, { paras: passage.paras.slice(0, 1) });
-      deck.push({ type: "u-read", passage, graded: false, probe: stageNo });
-      for (const qi of qIdx) { const q = it.qs[qi]; deck.push(Object.assign(qCard(Object.assign({}, q, { ev: q.e ? locate(passage.paras, q.e) : null }), passage, { guided: false, show: "open", stage: stageNo }), { probe: stageNo })); }
-    };
-    pass(23, 0, [0, 1], 3); pass(35, 0, [2, 3], 4); pass(41, 0, [0, 1], 5, true);
+    const deck = [];
+    [5, 15, 25, 35, 45].forEach((n, si) => {
+      const L = E.level("understand", n); if (!L) return;
+      const d = E.buildUnderstandDeck({ mode: "check", source: "level" }, L); let taken = 0, readAdded = false;
+      for (const c of d) {
+        if (taken >= 2) break;
+        if (c.type === "u-read") { if (!readAdded && taken === 0) { deck.push(Object.assign({}, c, { probe: si + 1 })); readAdded = true; } continue; }
+        if (!c.graded) continue;
+        deck.push(Object.assign({}, c, { probe: si + 1, guided: false, show: "open" })); taken++;
+      }
+    });
     return deck;
   };
 
   // Reading stories and Science lessons get the same look-back question cards.
   E.storyQuestionCards = (story, guided) => {
     const passage = { title: story.title || "", pic: null, paras: E.splitText(story.text) };
-    return (story.questions || []).map((q) => qCard({ k: guessKind(q.q), q: q.q, o: [q.o[q.a]].concat(q.o.filter((_, i) => i !== q.a)) }, passage, { guided, show: "closed", stage: 4 }));
+    return (story.questions || []).map((q) => qCard({ k: guessKind(q.q), q: q.q, o: [q.o[q.a || 0]].concat(q.o.filter((_, i) => i !== (q.a || 0))) }, passage, { guided, show: "closed", stage: 4 }));
   };
   E.lessonQuestionCards = (lesson, name, questions, guided, fallback) => {
     const passage = { title: name || "The lesson", pic: null, paras: E.splitText(lesson) };
     return questions.map((q) => {
-      if (q.t === "mc") return qCard({ k: guessKind(q.q), q: q.q, o: [q.o[q.a]].concat(q.o.filter((_, i) => i !== q.a)) }, passage, { guided, show: "closed", stage: 4 });
+      if (q.t === "mc") return qCard({ k: guessKind(q.q), q: q.q, o: [q.o[q.a || 0]].concat(q.o.filter((_, i) => i !== (q.a || 0))) }, passage, { guided, show: "closed", stage: 4 });
       if (q.t === "tf") return qCard({ k: "tf", q: q.q, a: q.a }, passage, { guided, show: "closed", stage: 4 });
       return fallback(q);
     });

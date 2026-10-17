@@ -64,15 +64,15 @@ window.GKA = window.GKA || {};
     { id: "reader", name: "Bookworm", desc: "Finish 10 stories", icon: "book", test: (c) => c.story >= 10 },
     { id: "mathwiz", name: "Math whiz", desc: "Solve 200 math problems", icon: "calc", test: (c) => c.math >= 200 },
     { id: "scientist", name: "Scientist", desc: "Finish 10 science lessons", icon: "flask", test: (c) => c.science >= 10 },
-    { id: "level10", name: "Halfway", desc: "Reach level 10 in any subject", icon: "map", test: (c) => c.maxLevel >= 10 },
-    { id: "level20", name: "Road done", desc: "Finish all 20 levels in a subject", icon: "crown", test: (c) => c.maxLevel >= 20 },
+    { id: "level10", name: "Halfway", desc: "Reach level 25 in any subject", icon: "map", test: (c) => c.maxLevel >= 25 },
+    { id: "level20", name: "Road done", desc: "Finish all 50 levels in a subject", icon: "crown", test: (c) => c.maxLevel >= 50 },
     { id: "words10", name: "Word collector", desc: "Add 10 of your own words", icon: "words", test: (c) => c.myWords >= 10 },
     { id: "chest", name: "Treasure hunter", desc: "Open a treasure chest", icon: "gift", test: (c) => c.chests >= 1 },
     { id: "detective", name: "Story detective", desc: "Pass 10 Understand levels", icon: "bulb", test: (c) => c.understand >= 10 },
     { id: "thinker", name: "Deep thinker", desc: "Finish all 50 Understand levels", icon: "crown", test: (c) => c.understandAll }
   ];
   R.BADGES = BADGES;
-  R.counters = () => { const d = data(); const s = Store.get(); const maxLevel = Math.max(Store.highestPassed("reading"), Store.highestPassed("math"), Store.highestPassed("science")); return Object.assign({ stars: s.stars, streak: Store.streak(), maxLevel, understand: Store.passedCount("understand"), understandAll: Store.highestPassed("understand") >= 50, myWords: Store.myWords().length, chests: Object.keys(d.chests || {}).length }, d.counts); };
+  R.counters = () => { const d = data(); const s = Store.get(); const maxLevel = Math.max(Store.highestPassed("reading"), Store.highestPassed("math"), Store.highestPassed("science"), Store.highestPassed("understand")); return Object.assign({ stars: s.stars, streak: Store.streak(), maxLevel, understand: Store.passedCount("understand"), understandAll: Store.highestPassed("understand") >= 50, myWords: Store.myWords().length, chests: Object.keys(d.chests || {}).length }, d.counts); };
   R.checkBadges = () => { const d = data(); const c = R.counters(); const fresh = []; for (const b of BADGES) { if (!d.badges[b.id] && b.test(c)) { d.badges[b.id] = Date.now(); fresh.push(b); } } if (fresh.length) { R.addGems(fresh.length * 5); Store.save(); } return fresh; };
   R.hasBadge = (id) => !!data().badges[id];
 

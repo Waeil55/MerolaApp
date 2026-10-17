@@ -605,7 +605,7 @@ window.GKA = window.GKA || {};
     bindWhere();
     const sayQ = () => Speech.speak(c.kind === "tf" ? "True or false? " + c.q : c.q + (c.kind === "mc" ? " " + c.options.map((o, i) => (i === 0 ? "Is it: " : "or: ") + o + "?").join(" ") : ""), { rate: settings().rate });
     $("#hearq").onclick = sayQ;
-    if ((c.stage || 3) <= 3 || c.guided) later(sayQ, 450);
+    if ((c.stage || 3) <= 3 || c.guided || ["kg", "g1", "g2"].includes(Store.grade())) later(sayQ, 450);
     function markCorrect() { const o = $("#opts"); if (!o) return; o.querySelectorAll(".option").forEach((x) => { const v = x.dataset.w; const isAns = c.kind === "tf" ? (v === "true") === c.answer : v === c.answer; x.classList.add(isAns ? "correct" : "dim"); x.disabled = true; }); }
     function done(ok, first) {
       if (ok) {
