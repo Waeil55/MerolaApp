@@ -1,7 +1,8 @@
 # Genius Kids Academy
 
-A learning app for kids from Kindergarten to Grade 6: Reading, Math and Science, 20 levels per subject for every grade (420 levels in all), plus Understand, a 50-level reading comprehension path,
-with four ways to practice every word (I Read, I Speak, I Listen, I Write) plus two stories per level, lessons with ten questions and twenty fresh math problems per run.
+A learning app for kids from Kindergarten to Grade 6 with four subjects: Reading, Math, Science and Understand (reading comprehension).
+Every grade has its own 50 levels in every subject, written for that grade: 7 grades x 4 subjects x 50 levels = 1,400 levels. A Kindergarten child learns letters and sounds; a Grade 3 child starts with syllable types and prefixes; a Grade 6 child works on Greek and Latin roots, ratios, cells and argument writing. The full list of levels is in [CURRICULUM.md](CURRICULUM.md).
+There are four ways to practice every word (I Read, I Speak, I Listen, I Write) plus two stories per Reading level, lessons with eight or more questions in Science, word problems and fresh math problems on every run.
 Every lesson mixes exercise types: flash cards with pictures, picture match, fill in the blank, match the pairs, unscramble, dictation, sentence building, letter tracing and read-aloud.
 Rewards like Duolingo: hearts, gems, daily quests, badges, treasure chests on the path, a weekly leaderboard between the kids on the device and a streak freeze. Each kid gets a profile with a name,
 avatar and grade, and their own progress. Duolingo-style path and lessons, no account, no API key, no cost. Works offline after the first load.
@@ -49,25 +50,41 @@ Parents can also switch hearts off (unlimited tries) and choose how many math pr
 
 ## Understand: learning to understand what you read
 
-Many children can read the words but cannot answer questions about a story. Usually they do not know what the question is asking for, or where to find the answer. Understand is a separate 50-level path, the same for every grade, that teaches both.
+Many children can read the words but cannot answer questions about a story. Usually they do not know what the question is asking for, or where to find the answer. Understand teaches both, with its own 50 levels for each grade in five stages of ten levels:
 
-| Stage | Levels | What the child does |
-|---|---|---|
-| Words | 1-10 | Picture and word meaning, then sorting words into WHO, WHAT, WHERE and WHEN |
-| Sentences | 11-20 | One sentence, one question, one question type per level: picture match, who, what, where, when, how many, true or false, why |
-| Mini stories | 21-30 | Two or three sentences: order of events, feelings, reasons, he/she/it/they, word clues, main idea |
-| Paragraphs | 31-40 | Four to six sentences: looking back, time order, cause and effect, characters, titles, word meaning, clues, comparing, facts |
-| Long stories | 41-50 | Stories and articles in four or five parts with eight questions: a fable, a diary, a mystery, two articles, and a final story |
+| Grade | Stage 1 | Stage 2 | Stage 3 | Stage 4 | Stage 5 |
+|---|---|---|---|---|---|
+| KG | Picture words | Word groups | Picture sentences | Question words | Tiny stories |
+| G1 | Sentences | Question words | Two sentences | Three sentences | Short stories |
+| G2 | Mini stories | Story clues | Paragraphs | Facts and details | Longer stories |
+| G3 | Paragraphs | Nonfiction | Stories in parts | Thinking deeper | Long texts |
+| G4 | Main idea | Inference | Informational texts | Literature | Long texts |
+| G5 | Theme and summary | Figurative language | Informational texts | Compare texts | Long texts |
+| G6 | Central idea | Author's craft | Argument | Literary analysis | Long texts |
 
 How it teaches:
 
 - **Question words first.** A tip card teaches each new question type with an example, and every question carries a coloured chip (WHO, WHERE, WHY...) that says what kind of answer to look for.
 - **Look back.** The text stays on screen. In Read together mode, Show me where lights up the sentence that holds the answer and marks the key words. After a wrong answer the sentence turns yellow so the child sees where the answer was; after a right answer it turns green.
 - **Two modes per level.** Read together gives tips, pictures and, for long stories, one part at a time with the questions for that part right after it. Show what you know has no hints and, from stage 4, folds the text away behind a Look back button. The level passes at the pass mark across both modes, and the first answer counts.
-- **Find my level.** Up to ten quick questions, two per stage, stop at the first miss and open every level below the starting point. Placed levels earn no stars and no chests.
+- **Find my level.** Up to ten quick questions from the child's own grade, two per stage, stop at the first miss and open every level below the starting point. Placed levels earn no stars and no chests.
 - **Everywhere.** Reading story questions and Science lesson questions now use the same Look back cards, with the answer sentence found automatically.
 
-The content lives in `content/understand-1.js` to `understand-3.js`. Each question names the words that hold its answer (`e`), and `node tools/check-understand.js` checks every level, option list and evidence sentence.
+Each question names the words that hold its answer (`e`), and the content check below confirms every evidence phrase is really in the text.
+
+## Content and the content check
+
+Each grade has a folder, `content/kg` to `content/g6`, holding that grade's files: `reading-01.js` and up, `math.js`, `science-01.js` and up, and `understand-01.js` and up. Each file adds levels to one subject of one grade, and the app joins them by level number.
+
+After changing content, run these three commands:
+
+```
+node tools/build-index.js
+node tools/check-content.js
+node tools/build-sw.js
+```
+
+The first adds every content file to `index.html`. The second checks that every grade has levels 1 to 50 in every subject and that every level is well formed: enough words, stories with questions, lessons of a real length, answer options that include the answer, math generators that never fail, and Understand evidence that exists in the text. It must end with "all content complete, no errors". The third refreshes the offline cache list. `node tools/build-curriculum.js` rewrites CURRICULUM.md.
 
 ## Rewards
 
@@ -89,7 +106,7 @@ The app is live at **https://waeil55.github.io/MerolaApp/** as an installable we
 ## Files
 
 - `index.html` the app shell. `styles.css` the design (light and dark).
-- `content/reading-<grade>.js`, `content/science-<grade>.js`, `content/math-<grade>.js` hold the 20 levels per grade (`reading.js`, `math.js`, `science.js` are Grade 3). `content/extra-reading-<grade>.js` and `content/extra-science-<grade>.js` add ten more words, a second story, four more questions and a longer lesson to every level; `content/pictures.js` maps words to picture emoji. `content/math-lib.js` holds the math problem generators. Edit these to change words, stories, lessons or questions.
+- `content/<grade>/` holds that grade's 50 levels for each subject (see above). `content/pictures.js` maps words to picture emoji. `content/math-lib.js` and `content/math-more.js` hold the math problem and word problem generators. Edit these to change words, stories, lessons or questions.
 - `js/rewards.js` hearts, gems, quests, badges, chests, shop and leaderboard.
 - `js/understand.js` the comprehension engine: sentence splitting, evidence finding, decks for the five stages, placement, and look-back cards for stories and lessons.
 - `js/engine.js` builds decks and applies the star and review rules. `js/session.js` plays the cards. `js/views.js` the screens.

@@ -73,7 +73,7 @@ window.GKA = window.GKA || {};
   Store.setKid = (name, avatar) => { const p = Store.profile(); if (!p) return; if (name) p.name = name; if (avatar) p.avatar = avatar; Store.save(); };
 
   // ----- levels (per subject and grade) -----
-  // Understand is one path for every grade; the other subjects keep progress per grade.
+  // Every subject keeps its own 50-level progress for each grade.
   const gk = () => Store.grade();
   Store.gradeKey = gk;
   const maxLv = (subject) => { const En = window.GKA.Engine; const n = En ? En.levels(subject).length : 0; return n || 20; };
