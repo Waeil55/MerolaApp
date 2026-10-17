@@ -27,7 +27,8 @@ window.GKA = window.GKA || {};
       else if (name === "hub") V.hub(el, parts[1], parseInt(parts[2], 10) || 1);
       else if (name === "play") {
         inPlay = true;
-        if (parts[1] === "words") Session.start({ subject: "reading", n: Store.currentLevel("reading"), mode: parts[2] || "read", source: "mywords" }, el);
+        if (parts[1] === "placement") Session.start({ subject: "understand", n: 1, mode: "placement", source: "placement" }, el);
+        else if (parts[1] === "words") Session.start({ subject: "reading", n: Store.currentLevel("reading"), mode: parts[2] || "read", source: "mywords" }, el);
         else if (parts[1] === "review") Session.start({ subject: parts[2] || "reading", n: Store.currentLevel(parts[2] || "reading"), mode: parts[3] || "speak", source: "review" }, el);
         else { const subject = parts[1], n = parseInt(parts[2], 10) || 1, mode = parts[3] || "read"; if (!Store.isUnlocked(subject, n)) { inPlay = false; UI.toast("That level is still locked", "warn"); return App.go("home-" + subject); } Session.start({ subject, n, mode, source: "level" }, el); }
       }

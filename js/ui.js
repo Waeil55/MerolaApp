@@ -43,6 +43,9 @@ window.GKA = window.GKA || {};
     users: stroke('<circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-4 3-6 7-6s7 2 7 6"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14c3 0 5 2 5 5"/>'),
     abc: stroke('<path d="M3 17l3-10 3 10M4.5 13h3M12 7v10M12 12h3a2.5 2.5 0 0 1 0 5h-3M12 7h2.5a2.5 2.5 0 0 1 0 5M21 9a3 3 0 0 0-3-2 4 4 0 0 0 0 8 3 3 0 0 0 3-2"/>'),
     moon: stroke('<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'),
+    box: stroke('<path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/>'),
+    pin: stroke('<path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/>'),
+    hash: stroke('<path d="M5 9h14M5 15h14M10 4L8 20M16 4l-2 16"/>'),
     heart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9.3C1.2 8.4 3.3 5 6.8 5c2 0 3.4 1.1 4.2 2.3C11.8 6.1 13.2 5 15.2 5c3.5 0 5.6 3.4 4.3 6.7C17.5 16.4 12 21 12 21z" fill="currentColor"/></svg>',
     gem: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10l4 6-9 12L3 9z" fill="currentColor"/><path d="M3 9h18M7 3l5 6 5-6M12 9l-3 12M12 9l3 12" stroke="rgba(255,255,255,.6)" stroke-width="1.5" fill="none"/></svg>',
     chest: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v2H3z" fill="currentColor"/><path d="M3 12h18v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" fill="currentColor" opacity=".75"/><rect x="10" y="10" width="4" height="5" rx="1" fill="rgba(255,255,255,.9)"/></svg>',
@@ -62,7 +65,7 @@ window.GKA = window.GKA || {};
     nova: '<svg viewBox="0 0 120 120" role="img" aria-label="Nova the star"><path d="M60 26L71.8 53.8L101.8 56.4L79 76.2L85.9 105.6L60 90L34.1 105.6L41 76.2L18.2 56.4L48.2 53.8Z" fill="#E5B400" stroke="#E5B400" stroke-width="10" stroke-linejoin="round"/><path d="M60 22L71.8 49.8L101.8 52.4L79 72.2L85.9 101.6L60 86L34.1 101.6L41 72.2L18.2 52.4L48.2 49.8Z" fill="#FFC800" stroke="#FFC800" stroke-width="10" stroke-linejoin="round"/><circle cx="48" cy="64" r="9" fill="#FFFFFF"/><circle cx="72" cy="64" r="9" fill="#FFFFFF"/><circle cx="49.5" cy="65" r="4.5" fill="#1F2937"/><circle cx="73.5" cy="65" r="4.5" fill="#1F2937"/><circle cx="51.5" cy="63" r="1.6" fill="#FFFFFF"/><circle cx="75.5" cy="63" r="1.6" fill="#FFFFFF"/><circle cx="38" cy="76" r="5" fill="#FF9BB3" opacity=".85"/><circle cx="82" cy="76" r="5" fill="#FF9BB3" opacity=".85"/><path d="M50 78q10 9 20 0" stroke="#1F2937" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M42 27L62 15L84 23L64 35Z" fill="#1CB0F6"/><path d="M48 31l0 7q8 6 16 0l0-7" fill="#1899D6"/><path d="M82 24l3 12" stroke="#FF9600" stroke-width="3" stroke-linecap="round"/><circle cx="85.5" cy="38" r="3" fill="#FF9600"/></svg>'
   };
   UI.mascot = (name) => UI.mascots[name] || UI.mascots.cat;
-  UI.subjectMascot = (id) => ({ reading: "nova", math: "panda", science: "dog" }[id] || "nova");
+  UI.subjectMascot = (id) => ({ reading: "nova", math: "panda", science: "dog", understand: "wink" }[id] || "nova");
 
   UI.stars = (n, max) => { max = max || 3; let s = '<span class="stars" aria-label="' + n + ' of ' + max + ' stars">'; for (let i = 0; i < max; i++) s += '<span class="star ' + (i < n ? "on" : "") + '">' + UI.icons.star + "</span>"; return s + "</span>"; };
 
@@ -102,8 +105,9 @@ window.GKA = window.GKA || {};
 
   UI.avatars = { star: "⭐", fox: "🦊", robot: "🤖", unicorn: "🦄", dino: "🦖", cat: "🐱", rocket: "🚀", panda: "🐼", lion: "🦁", frog: "🐸", bunny: "🐰", bee: "🐝" };
   UI.avatar = (key) => UI.avatars[key] || UI.avatars.star;
-  UI.subjectIcon = (id) => ({ reading: UI.icons.book, math: UI.icons.calc, science: UI.icons.flask }[id] || UI.icons.book);
-  UI.toneOf = (id) => ({ reading: "blue", math: "green", science: "orange" }[id] || "blue");
+  UI.subjectIcon = (id) => ({ reading: UI.icons.book, math: UI.icons.calc, science: UI.icons.flask, understand: UI.icons.bulb }[id] || UI.icons.book);
+  UI.toneOf = (id) => ({ reading: "blue", math: "green", science: "orange", understand: "grape" }[id] || "blue");
+  UI.qchip = (k, big) => { const En = window.GKA.Engine; const t = (En && En.QTYPES && (En.QTYPES[k] || En.QTYPES.what)) || { label: k, icon: "bulb", tone: "blue" }; return '<span class="qchip ' + t.tone + (big ? " big" : "") + '">' + UI.icon(t.icon) + "<span>" + t.label + "</span></span>"; };
 
   UI.modal = (html, opts) => {
     opts = opts || {};

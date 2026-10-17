@@ -21,11 +21,11 @@ window.GKA = window.GKA || {};
     renderFrame(); renderCard();
   };
   S.abort = () => { clearTimers(); Speech.stop(); Speech.cancelListen(); if (st) Store.addSeconds(Math.round((Date.now() - st.t0) / 1000)); st = null; };
-  S.next = () => { if (!st) return; st.idx++; renderCard(); };
+  S.next = () => { if (!st) return; const c = st.deck[st.idx]; if (st.source === "placement" && c && c.graded && st.cur && st.cur.first === false) return finishPlacement(); st.idx++; renderCard(); };
 
   const speedSeconds = () => { const sp = settings().speed; if (sp === "level" || sp == null) { const L = E.level(st.subject, st.n); return L ? L.speed : 1; } return Number(sp) || 0; };
   const modeLabel = () => E.modeLabel(st.mode);
-  const levelLabel = () => st.source === "mywords" ? "My Words" : st.source === "review" ? "Review" : "Level " + st.n;
+  const levelLabel = () => st.source === "placement" ? "Level check" : st.source === "mywords" ? "My Words" : st.source === "review" ? "Review" : "Level " + st.n;
   const $ = (sel) => st.root.querySelector(sel);
 
   function renderFrame() {
@@ -42,7 +42,7 @@ window.GKA = window.GKA || {};
   function confirmExit() {
     const m = UI.modal('<h2>Stop the lesson?</h2><p class="muted">Your stars so far are safe. This run will not count for the level.</p><div class="row"><button class="btn grow" id="m-no">Keep going</button><button class="btn red grow" id="m-yes">Stop</button></div>');
     m.el.querySelector("#m-no").onclick = m.close;
-    m.el.querySelector("#m-yes").onclick = () => { m.close(); const back = st.source === "mywords" ? "words" : "hub-" + st.subject + "-" + st.n; S.abort(); window.GKA.App.go(back); };
+    m.el.querySelector("#m-yes").onclick = () => { m.close(); const back = st.source === "placement" ? "home-understand" : st.source === "mywords" ? "words" : "hub-" + st.subject + "-" + st.n; S.abort(); window.GKA.App.go(back); };
   }
   const HEADINGS = { flash: "Read this word out loud", readcheck: "Which one did you just see?", speak: "Say this word", write: "Look at the word", "story-listen": "Listen to the story", "story-words": "Read it word by word", question: "Answer the question", truefalse: "True or false?", order: "Put it in order", lesson: "Listen and read along", picmatch: "Which word is this picture?", blank: "Fill in the blank", match: "Match the pairs", unscramble: "Unscramble the letters", dictation: "Listen and type the sentence", sentence: "Build the sentence", trace: "Trace the letter", readaloud: "Read the sentence out loud" };
   function heading(text) { const h = $("#heading"); if (h) h.textContent = text; }
@@ -69,6 +69,8 @@ window.GKA = window.GKA || {};
     const c = st.deck[st.idx];
     st.cur = { tries: 0, first: null, done: false, review: c.graded ? E.isReviewCard(st.subject, st.n, st.mode, c.word) : false };
     if (st.source === "mywords" || st.source === "review") st.cur.review = c.graded ? Store.isMastered(Store.masteryKey(st.subject, st.mode, c.word)) : false;
+    if (st.source === "placement") st.cur.review = true;
+    st.reading = false;
     resetBar(); setHead(); below("");
     window.scrollTo(0, 0);
     const r = RENDER[c.type];
@@ -83,9 +85,9 @@ window.GKA = window.GKA || {};
       st.cur.first = ok;
       const key = Store.masteryKey(st.subject, st.mode, c.word);
       let stars = 0;
-      if (ok) { Store.bumpMastery(key); stars = st.cur.review ? 0 : 1; st.stars += stars; }
-      else { Store.logMistake({ subject: st.subject, level: st.n, mode: st.mode, word: c.word, said: info && info.heard ? info.heard : "" }); if (RW().heartsOn()) { const left = RW().loseHeart(); const h = $("#hearts"); if (h) { h.classList.add("shake"); later(() => h.classList.remove("shake"), 600); } if (left <= 0) later(outOfHearts, 1200); } }
-      st.results.push({ word: c.word, ok, review: st.cur.review, stars, type: c.type });
+      if (ok) { if (st.source !== "placement") Store.bumpMastery(key); stars = st.cur.review ? 0 : 1; st.stars += stars; }
+      else if (st.source !== "placement") { Store.logMistake({ subject: st.subject, level: st.n, mode: st.mode, word: c.word, said: info && info.heard ? info.heard : "" }); if (RW().heartsOn()) { const left = RW().loseHeart(); const h = $("#hearts"); if (h) { h.classList.add("shake"); later(() => h.classList.remove("shake"), 600); } if (left <= 0) later(outOfHearts, 1200); } }
+      st.results.push({ word: c.word, ok, review: st.cur.review, stars, type: c.type, probe: c.probe });
       setHead();
     }
     if (ok) { st.cur.done = true; Speech.sfx(first && !st.cur.review ? "star" : "ok"); } else Speech.sfx("no");
@@ -484,8 +486,182 @@ window.GKA = window.GKA || {};
     $("#mic").onclick = () => { if (!micOK) return showFeedback("info", "The mic is not available here", "Use the two buttons below to check it yourself."); listenFor(c, c.sentence, "", (m, res) => { const mm = U.matchSpeech(res.alts, c.sentence, "forgiving"); const first = answer(mm.ok, { heard: mm.heard }); if (mm.ok) { showFeedback("ok", praise() + " You read it", first && !st.cur.review ? "+1 star" : ""); autoNext(1600); } else showFeedback("no", "I heard \"" + (mm.heard || "…") + "\"", "Tap Hear it, then read the whole sentence."); }); };
   };
 
+  // ---------- Understand: comprehension cards ----------
+  const QT = (k) => E.QTYPES[k] || E.QTYPES.what;
+  const qchip = (k, big) => { const t = QT(k); return '<span class="qchip ' + t.tone + (big ? " big" : "") + '">' + UI.icon(t.icon) + "<span>" + U.esc(t.label) + "</span></span>"; };
+  const markIn = (sentence, ans) => { const s = U.esc(sentence); if (!ans) return s; const a = U.esc(ans); const i = s.toLowerCase().indexOf(a.toLowerCase()); return i < 0 ? s : s.slice(0, i) + "<mark>" + s.slice(i, i + a.length) + "</mark>" + s.slice(i + a.length); };
+  const markWords = (sentence, ans) => { const keys = new Set(E.keyTokens(ans)); return sentence.split(/(\s+)/).map((w) => { const k = E.stemWord(w); return k && keys.has(k) ? "<mark>" + U.esc(w) + "</mark>" : U.esc(w); }).join(""); };
+  function passageHTML(p, o) {
+    o = o || {};
+    const upto = o.upto == null ? p.paras.length - 1 : o.upto;
+    const idx = o.only != null ? [o.only] : p.paras.slice(0, upto + 1).map((_, i) => i);
+    const paras = idx.map((i) => p.paras[i]);
+    const many = p.paras.length > 1 || p.paras[0].length > 1;
+    const body = (p.pic && !o.nopic ? '<div class="psg-pic" aria-hidden="true">' + p.pic + "</div>" : "") + paras.map((ss, k) => { const pi = idx[k]; return '<p class="psg-p' + (o.focus != null && pi !== o.focus ? " dim" : "") + (o.focus === pi ? " focus" : "") + '">' + ss.map((s, si) => '<span class="ps" data-p="' + pi + '" data-s="' + si + '">' + U.esc(s) + "</span>").join(" ") + "</p>"; }).join("");
+    const closed = o.show === "closed";
+    const title = (p.title && !p.notitle ? U.esc(p.title) : many ? "The story" : "The sentence") + (o.only != null && p.paras.length > 1 ? " · part " + (o.only + 1) : "");
+    return '<div class="passage' + (closed ? " closed" : "") + (many ? "" : " one") + (o.full ? " full" : "") + '" id="psg"><div class="psg-head"><span class="psg-title">' + title + "</span>" + (closed ? '<button type="button" class="btn soft-blue psg-btn" id="psg-look">' + UI.icon("eye") + " Look back</button>" : '<button type="button" class="btn soft-blue psg-btn" id="psg-hear">' + UI.icon("ear") + " Read to me</button>") + '</div><div class="psg-body" id="psg-body">' + body + "</div></div>";
+  }
+  function bindPassage(c) {
+    const look = $("#psg-look"); if (look) look.onclick = () => openPassage(true);
+    const hear = $("#psg-hear"); if (hear) hear.onclick = () => readPassage(c.focus);
+    st.root.querySelectorAll("#psg .ps").forEach((s) => { s.onclick = () => Speech.speak(s.textContent, { rate: settings().rate }); });
+  }
+  function openPassage(scroll) {
+    const p = $("#psg"); if (!p || !p.classList.contains("closed")) return;
+    p.classList.remove("closed");
+    const b = $("#psg-look"); if (b) { b.id = "psg-hear"; b.innerHTML = UI.icon("ear") + " Read to me"; b.onclick = () => readPassage(); }
+    if (scroll) p.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+  async function readPassage(focus) {
+    if (!st) return; const token = st.idx;
+    if (st.reading) { st.reading = false; Speech.stop(); return; }
+    st.reading = true;
+    const spans = [...st.root.querySelectorAll("#psg .ps")].filter((s) => focus == null || +s.dataset.p === focus);
+    for (const s of spans) { if (!st || st.idx !== token || !st.reading) break; spans.forEach((x) => x.classList.remove("reading")); s.classList.add("reading"); await Speech.speak(s.textContent, { rate: settings().rate }); }
+    spans.forEach((x) => x.classList.remove("reading")); if (st && st.idx === token) st.reading = false;
+  }
+  function showEvidence(c, words, ok) {
+    openPassage(false);
+    st.root.querySelectorAll("#psg .ps.ev").forEach((x) => { x.classList.remove("ev", "ev-ok"); x.textContent = x.textContent; });
+    if (!c.ev) return false;
+    const s = st.root.querySelector('#psg .ps[data-p="' + c.ev[0] + '"][data-s="' + c.ev[1] + '"]'); if (!s) return false;
+    s.classList.add("ev"); if (ok) s.classList.add("ev-ok");
+    if (words && c.kind === "mc" && typeof c.answer === "string") s.innerHTML = markWords(s.textContent, c.answer);
+    s.scrollIntoView({ block: "center", behavior: "smooth" });
+    return true;
+  }
+
+  RENDER["u-tip"] = (c) => {
+    const t = QT(c.tip); heading("Reading tip");
+    stage('<div class="tip-card">' + qchip(c.tip, true) + "<h2>" + U.esc(t.title) + "</h2><p>" + U.esc(t.tip) + "</p>" + (t.ex ? '<div class="tip-ex"><div class="tip-ex-l">Example</div><div class="tip-ex-s">' + markIn(t.ex.t, t.ex.a) + '</div><div class="tip-ex-q">' + U.esc(t.ex.q) + '</div><div class="tip-ex-a">' + UI.icon("check") + "<span>" + U.esc(t.ex.a.charAt(0).toUpperCase() + t.ex.a.slice(1)) + "</span></div></div>" : "") + "</div>");
+    actions('<button class="btn" id="hear">' + UI.icon("ear") + " Hear it</button>" + nextBtn("Got it")); bindNext();
+    const say = () => Speech.speak(t.title + ". " + t.tip + (t.ex ? " For example. " + t.ex.t + " " + t.ex.q + " " + t.ex.a + "." : ""), { rate: settings().rate });
+    $("#hear").onclick = say; later(say, 400);
+  };
+  RENDER["u-word"] = (c) => {
+    heading("Learn the word");
+    stage('<div class="pic big" aria-hidden="true">' + c.pic + '</div><div class="giant">' + U.esc(c.word) + "</div>");
+    actions('<button class="btn" id="hear">' + UI.icon("ear") + " Hear it</button>" + nextBtn("Got it")); bindNext();
+    const say = () => Speech.speak(c.word, { rate: settings().rate }); $("#hear").onclick = say; later(say, 300);
+  };
+  function bindChoice(c, isOk, wrongTitle, wrongSub, say) {
+    const placement = st.source === "placement";
+    $("#opts").querySelectorAll(".option").forEach((b) => { b.onclick = () => {
+      if (st.cur.done || b.disabled) return;
+      const val = b.dataset.w; const ok = isOk(val); const first = answer(ok, { heard: val });
+      if (ok) { b.classList.add("correct"); $("#opts").querySelectorAll(".option").forEach((x) => { if (x !== b) x.classList.add("dim"); }); showFeedback("ok", praise(), first && !st.cur.review ? "+1 star" : ""); if (say) say(); autoNext(1600); return; }
+      b.classList.add("wrong"); b.disabled = true;
+      if (placement) { st.cur.done = true; $("#opts").querySelectorAll(".option").forEach((x) => { if (isOk(x.dataset.w)) x.classList.add("correct"); x.disabled = true; }); showFeedback("no", "Good try!", "Let's see where to start."); return; }
+      showFeedback("no", typeof wrongTitle === "function" ? wrongTitle(val) : wrongTitle, typeof wrongSub === "function" ? wrongSub(val) : wrongSub);
+    }; });
+  }
+  RENDER["u-wordpic"] = (c) => {
+    heading(c.listen ? "Listen, then tap the picture" : "Which picture shows the word?");
+    stage((st.source === "placement" ? "" : reviewTag()) + (c.listen ? '<button class="btn round md green" id="hearbig" aria-label="Hear the word">' + UI.icon("ear") + "</button>" : '<div class="giant">' + U.esc(c.word) + "</div>") + '<div class="options pic-opts" id="opts">' + c.options.map((o) => '<button class="option picopt" data-w="' + U.esc(o) + '"><span class="pic">' + o + "</span></button>").join("") + "</div>");
+    actions('<button class="btn" id="hear">' + UI.icon("ear") + " Hear it</button>" + nextBtn()); $("#next").disabled = true; bindNext();
+    const say = () => Speech.speak(c.word, { rate: settings().rate }); $("#hear").onclick = say; if ($("#hearbig")) $("#hearbig").onclick = say; later(say, 300);
+    bindChoice(c, (v) => v === c.pic, "That is not it", "Listen again: " + c.word + ". Which picture is it?", say);
+  };
+  RENDER["u-picword"] = (c) => {
+    heading("Which word matches the picture?");
+    stage(reviewTag() + '<div class="pic big" aria-hidden="true">' + c.pic + '</div><div class="options" id="opts">' + c.options.map((o) => '<button class="option" data-w="' + U.esc(o) + '">' + U.esc(o) + "</button>").join("") + "</div>");
+    actions(nextBtn()); $("#next").disabled = true; bindNext();
+    bindChoice(c, (v) => v === c.word, (v) => "That says " + v, "Look at the picture again. Read each word.", () => Speech.speak(c.word, { rate: settings().rate }));
+  };
+  RENDER["u-sort"] = (c) => {
+    const desc = { who: "a person or an animal", what: "a thing", where: "a place", when: "a time" };
+    heading("Who, what, where or when?");
+    stage(reviewTag() + '<div class="pic big" aria-hidden="true">' + c.pic + '</div><div class="giant sm">' + U.esc(c.word) + '</div><div class="options sort-opts" id="opts">' + ["who", "what", "where", "when"].map((k) => '<button class="option sortopt ' + QT(k).tone + '" data-w="' + k + '">' + UI.icon(QT(k).icon) + "<span>" + k.toUpperCase() + "</span><small>" + desc[k] + "</small></button>").join("") + "</div>");
+    actions('<button class="btn" id="hear">' + UI.icon("ear") + " Hear it</button>" + nextBtn()); $("#next").disabled = true; bindNext();
+    const say = () => Speech.speak(c.word, { rate: settings().rate }); $("#hear").onclick = say; later(say, 300);
+    bindChoice(c, (v) => v === c.answer, "Not quite", '"' + c.word + '" is ' + desc[c.answer] + ", so it is a " + c.answer.toUpperCase() + " word.");
+  };
+  RENDER["u-read"] = (c) => {
+    st.reading = false;
+    heading(c.part ? "Read part " + c.part + " of " + c.parts : c.passage.paras.length > 1 ? "Read the story" : "Read carefully");
+    stage(passageHTML(c.passage, { upto: c.upto, focus: c.focus, full: true }) + '<div class="read-tip">' + UI.icon("bulb") + "<span>" + (c.part ? "Read this part. Then ask yourself: who is in it, what happened, and why?" : "Read every sentence. Then answer the questions. You can look back any time.") + "</span></div>");
+    bindPassage(c);
+    actions('<button class="btn blue" id="play">' + UI.icon("play") + " Read to me</button>" + nextBtn("I read it")); bindNext();
+    $("#play").onclick = () => readPassage(c.focus);
+  };
+  RENDER.uq = (c) => {
+    st.reading = false;
+    const t = QT(c.k); const placement = st.source === "placement";
+    heading(c.kind === "tf" ? "True or false?" : c.kind === "order" ? "Put it in order" : c.kind === "picopt" ? "Which picture matches?" : "Answer the question");
+    let ans = "";
+    if (c.kind === "mc") ans = '<div class="options one" id="opts">' + c.options.map((o) => '<button class="option text" data-w="' + U.esc(o) + '">' + U.esc(o) + "</button>").join("") + "</div>";
+    else if (c.kind === "picopt") ans = '<div class="options pic-opts" id="opts">' + c.options.map((o, i) => '<button class="option picopt" data-w="' + U.esc(o) + '" aria-label="Picture ' + (i + 1) + '"><span class="pic">' + o + "</span></button>").join("") + "</div>";
+    else if (c.kind === "tf") ans = '<div class="options" id="opts"><button class="option tfopt" data-w="true">' + UI.icon("check") + '<span>True</span></button><button class="option tfopt" data-w="false">' + UI.icon("close") + "<span>False</span></button></div>";
+    else ans = '<div class="small muted" style="text-align:center">Tap the events in the order they happened. Tap again to undo.</div><div class="order-list" id="list">' + c.shuffled.map((it, i) => '<button class="order-item" data-i="' + i + '"><span class="num"></span><span class="grow">' + U.esc(it) + "</span></button>").join("") + "</div>";
+    stage((placement ? "" : reviewTag()) + passageHTML(c.passage, { upto: c.upto, show: c.show, only: c.only, nopic: (c.stage || 3) >= 3 }) + '<div class="uq-card"><div class="uq-top">' + qchip(c.k) + '<button type="button" class="btn icon uq-hear" id="hearq" aria-label="Hear the question">' + UI.icon("ear") + '</button></div><div class="uq-q">' + U.esc(c.q) + "</div></div>" + ans + '<div id="fb" style="width:100%"></div>');
+    bindPassage(c);
+    const showWhere = c.guided && !placement;
+    const whereBtn = () => (showWhere ? '<button class="btn" id="where">' + UI.icon("eye") + " Show me where</button>" : "");
+    const baseActions = () => whereBtn() + (c.kind === "order" ? '<button class="btn main" id="check">Check</button>' : nextBtn());
+    actions(baseActions());
+    if ($("#next")) { $("#next").disabled = true; bindNext(); }
+    const bindWhere = () => { const w = $("#where"); if (w) w.onclick = () => { if (!showEvidence(c, true)) showFeedback("info", t.title, t.tip); }; };
+    bindWhere();
+    const sayQ = () => Speech.speak(c.kind === "tf" ? "True or false? " + c.q : c.q + (c.kind === "mc" ? " " + c.options.map((o, i) => (i === 0 ? "Is it: " : "or: ") + o + "?").join(" ") : ""), { rate: settings().rate });
+    $("#hearq").onclick = sayQ;
+    if ((c.stage || 3) <= 3 || c.guided) later(sayQ, 450);
+    function markCorrect() { const o = $("#opts"); if (!o) return; o.querySelectorAll(".option").forEach((x) => { const v = x.dataset.w; const isAns = c.kind === "tf" ? (v === "true") === c.answer : v === c.answer; x.classList.add(isAns ? "correct" : "dim"); x.disabled = true; }); }
+    function done(ok, first) {
+      if (ok) {
+        const had = showEvidence(c, false, true);
+        if (!$("#next")) { actions(nextBtn()); bindNext(); }
+        showFeedback("ok", praise(), first && !st.cur.review ? "+1 star" : had ? "The green sentence shows where the answer is." : "");
+        autoNext(2600); return;
+      }
+      if (placement) { st.cur.done = true; markCorrect(); if (!$("#next")) { actions(nextBtn()); bindNext(); } showFeedback("no", "Good try!", "Let's see where to start."); return; }
+      const shown = showEvidence(c, c.guided);
+      showFeedback("no", shown ? "Look at the yellow sentence" : "Not quite. Try again!", t.wrong || "Read it again and try once more.");
+    }
+    if (c.kind === "order") {
+      let picked = [];
+      const draw = () => $("#list").querySelectorAll(".order-item").forEach((b) => { const k = picked.indexOf(+b.dataset.i); b.classList.toggle("on", k >= 0); b.querySelector(".num").textContent = k >= 0 ? k + 1 : ""; });
+      const check = () => {
+        if (st.cur.done) return;
+        if (picked.length !== c.shuffled.length) return showFeedback("info", "Tap every event first", "");
+        const order = picked.map((i) => c.shuffled[i]); const ok = order.every((x, i) => x === c.items[i]);
+        const first = answer(ok, { heard: order.join(" > ") });
+        $("#list").querySelectorAll(".order-item").forEach((b) => { const k = picked.indexOf(+b.dataset.i); b.classList.remove("ok", "bad"); b.classList.add(c.shuffled[+b.dataset.i] === c.items[k] ? "ok" : "bad"); });
+        if (ok || placement) return done(ok, first);
+        actions(whereBtn() + '<button class="btn" id="clear">Try again</button>' + nextBtn("Skip")); bindNext(); bindWhere();
+        $("#clear").onclick = () => { picked = []; $("#list").querySelectorAll(".order-item").forEach((b) => b.classList.remove("ok", "bad")); draw(); resetBar(); actions(baseActions()); bindWhere(); $("#check").onclick = check; };
+        showFeedback("no", "Not yet. Green ones are in the right place.", "Look for first, next, then and last. It starts with: " + c.items[0]);
+      };
+      $("#list").querySelectorAll(".order-item").forEach((b) => { b.onclick = () => { if (st.cur.done) return; const i = +b.dataset.i; const k = picked.indexOf(i); if (k >= 0) picked.splice(k, 1); else picked.push(i); Speech.sfx("tap"); draw(); if (picked.length === c.shuffled.length) later(check, 350); }; });
+      $("#check").onclick = check;
+      return;
+    }
+    $("#opts").querySelectorAll(".option").forEach((b) => { b.onclick = () => {
+      if (st.cur.done || b.disabled) return;
+      const val = b.dataset.w;
+      const ok = c.kind === "tf" ? (val === "true") === c.answer : val === c.answer;
+      const first = answer(ok, { heard: val });
+      b.classList.add(ok ? "correct" : "wrong"); if (!ok) b.disabled = true;
+      if (ok) $("#opts").querySelectorAll(".option").forEach((x) => { if (x !== b) x.classList.add("dim"); });
+      done(ok, first);
+    }; });
+  };
+
+  function finishPlacement() {
+    const res = st.results; const secs = Math.round((Date.now() - st.t0) / 1000);
+    let passed = 0;
+    for (let s = 1; s <= 5; s++) { const need = st.deck.filter((c) => c.graded && c.probe === s).length; const rs = res.filter((r) => r.probe === s); if (!need || rs.length < need || rs.some((r) => !r.ok)) break; passed++; }
+    const start = Math.min(41, passed * 10 + 1);
+    Store.placeAt("understand", start); Store.addSeconds(secs);
+    const correct = res.filter((r) => r.ok).length;
+    window.GKA.lastResult = { subject: "understand", n: start, mode: "placement", source: "placement", correct, total: res.length, accuracy: U.pct(correct, res.length), stars: 0, bonus: 0, review: 0, secs, missed: [], status: null, graded: res.length > 0, placement: { start, passed } };
+    st = null; clearTimers(); Speech.sfx("win"); UI.confetti(120);
+    window.GKA.App.go("results");
+  }
+
   // ---------- finish ----------
   function finish() {
+    if (st.source === "placement") return finishPlacement();
     const graded = st.results;
     const correct = graded.filter((r) => r.ok).length, total = graded.length;
     const review = graded.filter((r) => r.review).length;

@@ -67,17 +67,19 @@ window.GKA = window.GKA || {};
     { id: "level10", name: "Halfway", desc: "Reach level 10 in any subject", icon: "map", test: (c) => c.maxLevel >= 10 },
     { id: "level20", name: "Road done", desc: "Finish all 20 levels in a subject", icon: "crown", test: (c) => c.maxLevel >= 20 },
     { id: "words10", name: "Word collector", desc: "Add 10 of your own words", icon: "words", test: (c) => c.myWords >= 10 },
-    { id: "chest", name: "Treasure hunter", desc: "Open a treasure chest", icon: "gift", test: (c) => c.chests >= 1 }
+    { id: "chest", name: "Treasure hunter", desc: "Open a treasure chest", icon: "gift", test: (c) => c.chests >= 1 },
+    { id: "detective", name: "Story detective", desc: "Pass 10 Understand levels", icon: "bulb", test: (c) => c.understand >= 10 },
+    { id: "thinker", name: "Deep thinker", desc: "Finish all 50 Understand levels", icon: "crown", test: (c) => c.understandAll }
   ];
   R.BADGES = BADGES;
-  R.counters = () => { const d = data(); const s = Store.get(); const maxLevel = Math.max(Store.highestPassed("reading"), Store.highestPassed("math"), Store.highestPassed("science")); return Object.assign({ stars: s.stars, streak: Store.streak(), maxLevel, myWords: Store.myWords().length, chests: Object.keys(d.chests || {}).length }, d.counts); };
+  R.counters = () => { const d = data(); const s = Store.get(); const maxLevel = Math.max(Store.highestPassed("reading"), Store.highestPassed("math"), Store.highestPassed("science")); return Object.assign({ stars: s.stars, streak: Store.streak(), maxLevel, understand: Store.passedCount("understand"), understandAll: Store.highestPassed("understand") >= 50, myWords: Store.myWords().length, chests: Object.keys(d.chests || {}).length }, d.counts); };
   R.checkBadges = () => { const d = data(); const c = R.counters(); const fresh = []; for (const b of BADGES) { if (!d.badges[b.id] && b.test(c)) { d.badges[b.id] = Date.now(); fresh.push(b); } } if (fresh.length) { R.addGems(fresh.length * 5); Store.save(); } return fresh; };
   R.hasBadge = (id) => !!data().badges[id];
 
   // ----- treasure chests on the path (one per unit of 5 levels) -----
-  R.chestKey = (subject, unit) => subject + ":" + Store.grade() + ":" + unit;
+  R.chestKey = (subject, unit) => subject + ":" + Store.gradeKey(subject) + ":" + unit;
   R.chestOpened = (subject, unit) => !!data().chests[R.chestKey(subject, unit)];
-  R.chestReady = (subject, unit) => Store.highestPassed(subject) >= unit * 5;
+  R.chestReady = (subject, unit) => { if (Store.highestPassed(subject) < unit * 5) return false; const L = Store.levelPeek(subject, unit * 5); return !(L && L.placed); };
   R.openChest = (subject, unit) => { if (!R.chestReady(subject, unit) || R.chestOpened(subject, unit)) return null; data().chests[R.chestKey(subject, unit)] = Date.now(); const stars = 25, gems = 10; Store.addStars(stars); R.addGems(gems); R.bump("chests", 1); Store.save(); return { stars, gems }; };
 
   // ----- streak freeze and shop -----
@@ -97,11 +99,11 @@ window.GKA = window.GKA || {};
     if (r.graded && r.accuracy >= 100) R.bump("perfect", 1);
     if (r.mode === "speak" || r.mode === "say") R.bump("speak", r.correct);
     if (r.mode === "write") R.bump("write", r.correct);
-    if (r.mode === "story") R.bump("story", 1);
+    if (r.mode === "story" || (r.subject === "understand" && r.mode === "check")) R.bump("story", 1);
     if (r.subject === "math") R.bump("math", r.correct);
     if (r.subject === "science") R.bump("science", 1);
     const day = U.dayKey(); d.starsByDay[day] = (d.starsByDay[day] || 0) + r.stars + r.bonus;
-    const quests = [].concat(R.questProgress("stars", r.stars + r.bonus), R.questProgress("lessons", 1), r.graded && r.accuracy >= 100 ? R.questProgress("perfect", 1) : [], (r.mode === "speak" || r.mode === "say") ? R.questProgress("speak", r.correct) : [], r.mode === "write" ? R.questProgress("write", r.correct) : [], r.mode === "story" ? R.questProgress("story", 1) : [], r.subject === "math" ? R.questProgress("math", r.correct) : [], r.subject === "science" ? R.questProgress("science", 1) : [], R.questProgress("minutes", Math.round(r.secs / 60)));
+    const quests = [].concat(R.questProgress("stars", r.stars + r.bonus), R.questProgress("lessons", 1), r.graded && r.accuracy >= 100 ? R.questProgress("perfect", 1) : [], (r.mode === "speak" || r.mode === "say") ? R.questProgress("speak", r.correct) : [], r.mode === "write" ? R.questProgress("write", r.correct) : [], (r.mode === "story" || (r.subject === "understand" && r.mode === "check")) ? R.questProgress("story", 1) : [], r.subject === "math" ? R.questProgress("math", r.correct) : [], r.subject === "science" ? R.questProgress("science", 1) : [], R.questProgress("minutes", Math.round(r.secs / 60)));
     const badges = R.checkBadges();
     Store.save();
     return { badges, quests };

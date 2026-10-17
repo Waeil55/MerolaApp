@@ -9,7 +9,8 @@ window.GKA = window.GKA || {};
   const META = {
     reading: { id: "reading", name: "Reading", modes: ["read", "speak", "listen", "write", "story"] },
     math: { id: "math", name: "Math", modes: ["solve", "pick", "say", "listen", "words"] },
-    science: { id: "science", name: "Science", modes: ["learn", "read", "speak", "listen", "write", "quiz"] }
+    science: { id: "science", name: "Science", modes: ["learn", "read", "speak", "listen", "write", "quiz"] },
+    understand: { id: "understand", name: "Understand", modes: ["guided", "check"] }
   };
   E.GRADES = [["kg", "Kindergarten"], ["g1", "Grade 1"], ["g2", "Grade 2"], ["g3", "Grade 3"], ["g4", "Grade 4"], ["g5", "Grade 5"], ["g6", "Grade 6"]];
   const GRADE_ORDER = ["kg", "g1", "g2", "g3", "g4", "g5", "g6"];
@@ -18,7 +19,7 @@ window.GKA = window.GKA || {};
   const registry = {};
   function build() {
     const parts = window.GKA.contentParts || [];
-    for (const part of parts) { if (part.extra) continue; registry[part.subject] = registry[part.subject] || {}; registry[part.subject][part.grade] = part.levels.map((L) => Object.assign({}, L, { words: (L.words || []).map(normWord), stories: L.story ? [L.story] : [] })); }
+    for (const part of parts) { if (part.extra) continue; registry[part.subject] = registry[part.subject] || {}; { const mapped = part.levels.map((L) => Object.assign({}, L, { words: (L.words || []).map(normWord), stories: L.story ? [L.story] : [] })); const cur = registry[part.subject][part.grade]; registry[part.subject][part.grade] = cur ? cur.concat(mapped).sort((a, b) => a.n - b.n) : mapped; } }
     for (const part of parts) {
       if (!part.extra) continue;
       const levels = (registry[part.subject] || {})[part.grade]; if (!levels) continue;
@@ -34,8 +35,8 @@ window.GKA = window.GKA || {};
   }
   build();
   E.subject = (id) => META[id] ? Object.assign({}, META[id], { grades: Object.keys(registry[id] || {}) }) : null;
-  E.subjects = () => ["reading", "math", "science"].map(E.subject);
-  E.levels = (subject, grade) => (registry[subject] && registry[subject][grade || Store.grade()]) || [];
+  E.subjects = () => ["reading", "math", "science", "understand"].map(E.subject);
+  E.levels = (subject, grade) => (registry[subject] && registry[subject][subject === "understand" ? "all" : (grade || Store.grade())]) || [];
   E.level = (subject, n, grade) => E.levels(subject, grade).find((l) => l.n === n) || null;
   E.levelNames = (subject, grade) => E.levels(subject, grade).map((l) => ({ n: l.n, name: l.name, skill: l.skill }));
   E.hasGrade = (subject, grade) => !!(registry[subject] && registry[subject][grade]);
@@ -85,6 +86,7 @@ window.GKA = window.GKA || {};
     const L = E.level(subject, n);
     const g = gradeIndex();
     const deck = [];
+    if ((subject === "understand" || source === "placement") && E.buildUnderstandDeck) return E.buildUnderstandDeck(opts, L);
     if (subject === "math") return buildMath(L, mode, opts.size || settings.deckSize || 20);
     const all = E.wordsFor(subject, n, order, source);
     const plays = source === "level" ? (Store.levelPeek(subject, n) || { plays: 0 }).plays : 0;
@@ -121,12 +123,15 @@ window.GKA = window.GKA || {};
       const story = L.stories[plays % L.stories.length];
       deck.push({ type: "story-listen", story, graded: false });
       deck.push({ type: "story-words", story, graded: false });
-      for (const q of story.questions) deck.push({ type: "question", q: q.q, options: U.shuffle(q.o), answer: q.o[q.a], graded: true, word: q.q });
+      if (E.storyQuestionCards) deck.push(...E.storyQuestionCards(story, true));
+      else for (const q of story.questions) deck.push({ type: "question", q: q.q, options: U.shuffle(q.o), answer: q.o[q.a], graded: true, word: q.q });
     } else if (mode === "learn" && L && L.lesson) {
       deck.push({ type: "lesson", lesson: L.lesson, words: L.words.map((w) => w.w), name: L.name, graded: false });
-      for (const q of (L.questions || []).slice(0, 6)) deck.push(quizCard(q));
+      if (E.lessonQuestionCards) deck.push(...E.lessonQuestionCards(L.lesson, L.name, (L.questions || []).slice(0, 6), true, quizCard));
+      else for (const q of (L.questions || []).slice(0, 6)) deck.push(quizCard(q));
     } else if (mode === "quiz" && L && L.questions) {
-      for (const q of U.shuffle(L.questions).slice(0, 10)) deck.push(quizCard(q));
+      if (E.lessonQuestionCards && L.lesson) deck.push(...E.lessonQuestionCards(L.lesson, L.name, U.shuffle(L.questions).slice(0, 10), false, quizCard));
+      else for (const q of U.shuffle(L.questions).slice(0, 10)) deck.push(quizCard(q));
     }
     return deck;
   };

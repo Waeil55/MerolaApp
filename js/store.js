@@ -71,12 +71,21 @@ window.GKA = window.GKA || {};
   Store.setKid = (name, avatar) => { const p = Store.profile(); if (!p) return; if (name) p.name = name; if (avatar) p.avatar = avatar; Store.save(); };
 
   // ----- levels (per subject and grade) -----
-  const subj = (subject, grade) => { const d = P(); const s = d.subjects[subject] || (d.subjects[subject] = {}); return s[grade || Store.grade()] || (s[grade || Store.grade()] = { levels: {} }); };
+  // Understand is one path for every grade; the other subjects keep progress per grade.
+  const gk = (subject) => (subject === "understand" ? "all" : Store.grade());
+  Store.gradeKey = gk;
+  const maxLv = (subject) => { const En = window.GKA.Engine; const n = En ? En.levels(subject).length : 0; return n || 20; };
+  const subj = (subject, grade) => { const d = P(); const s = d.subjects[subject] || (d.subjects[subject] = {}); return s[grade || gk(subject)] || (s[grade || gk(subject)] = { levels: {} }); };
   Store.level = (subject, n) => { const g = subj(subject); return g.levels[n] || (g.levels[n] = { modes: {}, passed: false, stars: 0, accuracy: 0, plays: 0 }); };
-  Store.levelPeek = (subject, n) => { const d = P(); const s = d.subjects[subject]; const g = s && s[Store.grade()]; return (g && g.levels[n]) || null; };
+  Store.levelPeek = (subject, n) => { const d = P(); const s = d.subjects[subject]; const g = s && s[gk(subject)]; return (g && g.levels[n]) || null; };
   Store.highestPassed = (subject) => { let h = 0; const lv = subj(subject).levels; for (const k in lv) if (lv[k].passed) h = Math.max(h, parseInt(k, 10)); return h; };
   Store.isUnlocked = (subject, n) => n <= 1 || Store.highestPassed(subject) >= n - 1;
-  Store.currentLevel = (subject) => Math.min(20, Store.highestPassed(subject) + 1);
+  Store.currentLevel = (subject) => Math.min(maxLv(subject), Store.highestPassed(subject) + 1);
+  Store.maxLevel = maxLv;
+  // Placement opens every level below the start. Placed levels earn no stars and no chests.
+  Store.placeAt = (subject, start) => { for (let n = 1; n < start; n++) { const L = Store.level(subject, n); if (!L.passed) { L.passed = true; L.placed = true; } } const d = P(); d.placed = d.placed || {}; d.placed[subject] = start; Store.save(); };
+  Store.placedAt = (subject) => ((P().placed || {})[subject]) || 0;
+  Store.passedCount = (subject) => { let c = 0; const lv = subj(subject).levels; for (const k in lv) if (lv[k].passed && !lv[k].placed) c++; return c; };
   Store.starsFor = (subject) => { let t = 0; const lv = subj(subject).levels; for (const k in lv) t += lv[k].stars || 0; return t; };
 
   Store.recordRun = (subject, n, mode, correct, total, requiredModes) => {
@@ -107,7 +116,7 @@ window.GKA = window.GKA || {};
 
   // ----- stars and mastery -----
   Store.addStars = (n) => { P().stars += n; Store.save(); };
-  Store.masteryKey = (subject, mode, word) => subject + ":" + Store.grade() + ":" + mode + ":" + U.norm(word);
+  Store.masteryKey = (subject, mode, word) => subject + ":" + gk(subject) + ":" + mode + ":" + U.norm(word);
   Store.bumpMastery = (key) => { const d = P(); d.mastery[key] = (d.mastery[key] || 0) + 1; };
   Store.isMastered = (key) => (P().mastery[key] || 0) >= 2;
   Store.wordStars = (subject, word) => { const modes = ["read", "speak", "listen", "write"]; const done = modes.filter((m) => Store.isMastered(Store.masteryKey(subject, m, word))).length; return Math.min(3, Math.round((done / modes.length) * 3)); };
