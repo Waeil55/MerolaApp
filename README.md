@@ -2,7 +2,11 @@
 
 A learning app for kids from Kindergarten to Grade 6 with four subjects: Reading, Math, Science and Understand (reading comprehension).
 Every grade has its own 50 levels in every subject, written for that grade: 7 grades x 4 subjects x 50 levels = 1,400 levels. A Kindergarten child learns letters and sounds; a Grade 3 child starts with syllable types and prefixes; a Grade 6 child works on Greek and Latin roots, ratios, cells and argument writing. The full list of levels is in [CURRICULUM.md](CURRICULUM.md).
-There are four ways to practice every word (I Read, I Speak, I Listen, I Write) plus two stories per Reading level, lessons with eight or more questions in Science, word problems and fresh math problems on every run.
+There are four ways to practice every word (I Read, I Speak, I Listen, I Write) plus four stories per Reading level, two-part lessons with fourteen or more questions in Science, word problems and fresh math problems on every run.
+
+In total the app holds about 10,600 words to study, 1,400 stories with 4,300 questions, 5,100 Science questions in lessons of 44,000 words, and 880 Understand passages with 3,800 evidence-checked questions, plus 1,090 picture sentences and sorting words. Replaying a level brings new words, stories, questions and passages instead of repeating the same ones.
+
+**Library.** The book button in the bottom bar opens the Library: every level of every subject for the child's grade, with search across words, stories, lessons and passages. Open a level to read its words (tap the ear to hear one), its stories and lessons, its questions with a Show answer button, or fresh math examples.
 Every lesson mixes exercise types: flash cards with pictures, picture match, fill in the blank, match the pairs, unscramble, dictation, sentence building, letter tracing and read-aloud.
 Rewards like Duolingo: hearts, gems, daily quests, badges, treasure chests on the path, a weekly leaderboard between the kids on the device and a streak freeze. Each kid gets a profile with a name,
 avatar and grade, and their own progress. Duolingo-style path and lessons, no account, no API key, no cost. Works offline after the first load.
@@ -74,7 +78,7 @@ Each question names the words that hold its answer (`e`), and the content check 
 
 ## Content and the content check
 
-Each grade has a folder, `content/kg` to `content/g6`, holding that grade's files: `reading-01.js` and up, `math.js`, `science-01.js` and up, and `understand-01.js` and up. Each file adds levels to one subject of one grade, and the app joins them by level number.
+Each grade has a folder, `content/kg` to `content/g6`, holding that grade's files: `reading-01.js` and up, `math.js`, `science-01.js` and up, and `understand-01.js` and up. Each file adds levels to one subject of one grade, and the app joins them by level number. Files named `reading-x1.js`, `science-x2.js`, `understand-x1.js` and so on are extra parts (`extra: true`): they add more words, stories, questions, a second lesson part (`lesson2`), passages, sentences or picture words to levels that already exist. A word or Science question that is already in the level is not added twice.
 
 After changing content, run these three commands:
 
