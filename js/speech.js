@@ -61,17 +61,25 @@ window.GKA = window.GKA || {};
   S.inFrame = (() => { try { return window.top !== window; } catch (e) { return true; } })();
   S.kokoroOK = !S.inFrame && typeof Worker !== "undefined" && typeof WebAssembly !== "undefined" && /^https?:$/.test(location.protocol);
   S.broken = {};
-  // The app's voice server. It answers a quick check when the app opens; until it says ready, the other voices speak.
-  S.CLOUD_URL = "https://tfqcgakqhnmkyhwbgeth.supabase.co/functions/v1/kids-tts";
+  // The app's voice server (kids-tts). It may live in either Supabase project; the app asks each when it opens and uses
+  // the first that says ready. Until then the other voices speak.
+  S.CLOUD_URLS = ["https://bgkugdyrqtsglavoghvb.supabase.co/functions/v1/kids-tts", "https://tfqcgakqhnmkyhwbgeth.supabase.co/functions/v1/kids-tts"];
+  S.CLOUD_URL = S.CLOUD_URLS[0];
   S.cloud = { state: "idle" };
+  const cloudPing = (url) => {
+    const ctl = typeof AbortController !== "undefined" ? new AbortController() : null; const t = setTimeout(() => ctl && ctl.abort(), 6000);
+    return fetch(url, { method: "GET", signal: ctl ? ctl.signal : undefined, cache: "no-store" })
+      .then((r) => r.ok ? r.json() : { ok: false }).then((j) => !!(j && j.ok)).catch(() => false).then((ok) => { clearTimeout(t); return ok; });
+  };
   S.cloudCheck = () => {
     if (S.cloud.state === "checking" || S.cloud.state === "ready") return S.cloud.p || Promise.resolve(S.cloud.state === "ready");
     if (S.inFrame || !/^https?:$/.test(location.protocol) || typeof fetch === "undefined") { S.cloud.state = "off"; return Promise.resolve(false); }
     S.cloud.state = "checking";
-    const ctl = typeof AbortController !== "undefined" ? new AbortController() : null; const t = setTimeout(() => ctl && ctl.abort(), 6000);
-    S.cloud.p = fetch(S.CLOUD_URL, { method: "GET", signal: ctl ? ctl.signal : undefined, cache: "no-store" })
-      .then((r) => r.ok ? r.json() : { ok: false }).then((j) => !!(j && j.ok)).catch(() => false)
-      .then((ok) => { clearTimeout(t); S.cloud.state = ok ? "ready" : "off"; window.dispatchEvent(new Event("gka-voice")); return ok; });
+    const urls = S.CLOUD_URLS.indexOf(S.CLOUD_URL) < 0 ? [S.CLOUD_URL] : S.CLOUD_URLS;
+    S.cloud.p = Promise.all(urls.map(cloudPing)).then((oks) => {
+      const i = oks.indexOf(true); if (i >= 0) S.CLOUD_URL = urls[i];
+      S.cloud.state = i >= 0 ? "ready" : "off"; window.dispatchEvent(new Event("gka-voice")); return i >= 0;
+    });
     return S.cloud.p;
   };
   S.engine = () => {
