@@ -23,10 +23,9 @@ window.GKA = window.GKA || {};
     if (pref === "anthropic" && k.anthropic) return "anthropic";
     if (k.anthropic) return "anthropic";
     if (k.openai) return "openai";
-    if (Speech.puterOK()) return "puter";
     return null;
   };
-  T.providerLabel = () => ({ "claude-app": "Claude AI", anthropic: "Claude AI", openai: "OpenAI", puter: "Claude AI (free with Puter)" })[T.provider()] || "Built-in help";
+  T.providerLabel = () => ({ "claude-app": "Claude AI", anthropic: "Claude AI", openai: "OpenAI" })[T.provider()] || "Built-in help";
 
   const SUBJECT = { reading: "Reading", math: "Math", science: "Science", understand: "Reading comprehension (Understand)" };
   const rules = () => {
@@ -139,17 +138,6 @@ window.GKA = window.GKA || {};
         body: JSON.stringify({ model: settings().openaiModel || "gpt-4o-mini", stream: true, messages: [{ role: "system", content: sys }].concat(history) }) });
       if (!res.ok) throw await httpError(res);
       return readSSE(res, (d) => d.choices && d.choices[0] && d.choices[0].delta ? d.choices[0].delta.content || "" : "", onText, signal);
-    }
-    if (p === "puter") {
-      const resp = await window.puter.ai.chat([{ role: "system", content: sys }].concat(history), { model: "claude-sonnet-4-6", stream: true, signal });
-      let text = "";
-      for await (const part of resp) {
-        if (signal && signal.aborted) throw { code: "cancelled", text };
-        if (part && part.type === "error") throw { message: part.message || "Puter error" };
-        const d = part && typeof part.text === "string" && (!part.type || part.type === "text") ? part.text : "";
-        if (d) { text += d; onText(text); }
-      }
-      return text;
     }
     return null;
   }

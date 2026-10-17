@@ -99,7 +99,6 @@ Four labeled tabs at the bottom, so a child can find everything alone:
 
 **Voice.** Every word, sentence, story, lesson and teacher answer goes through one voice layer (`js/speech.js`).
 - Default, free, no key or account: a human-sounding AI voice (Kokoro, open source) that runs on the device in a worker (`js/tts-worker.js`). It downloads once (about 90 MB; computers with a graphics card get the faster WebGPU model), every lesson prepares its words as it opens, and every clip is kept, so repeats start at once. A word that is not ready within a moment is said by the device voice while the human voice is made for next time. Not available inside the Claude app, where the device voice speaks.
-- Connect free AI (Puter): a grown-up signs in to a free Puter account once on the Parents page. The voice then uses ElevenLabs Flash and Nova uses Claude, with Puter’s free monthly allowance.
 - Free and instant: the app ranks the voices on the device and picks the most natural one (neural, online, enhanced, Siri and Google voices first). Microsoft Edge and Safari have very human voices; Parents can choose another one.
 - AI voice: on the Parents page, choose OpenAI or ElevenLabs and paste your own key. Clips are cached on the device (they replay instantly and work offline once heard), the next card's words are fetched ahead of time, and long texts start after the first sentence while the rest loads. If the key or the internet fails, the device voice takes over at once.
 

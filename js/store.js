@@ -7,7 +7,7 @@ window.GKA = window.GKA || {};
   const U = window.GKA.U;
   const GRADES = ["kg", "g1", "g2", "g3", "g4", "g5", "g6"];
   const defaultSettings = () => ({ passMark: 90, speed: "level", order: "shuffle", matching: "normal", voiceURI: "", rate: 0.9, pin: "1234", goalMin: 10, goalCards: 25, sound: true, theme: "auto", hearts: true, deckSize: 20,
-    voiceEngine: "auto", kokoroVoice: "af_heart", puter: false, aiVoice: "nova", elevenVoice: "21m00Tcm4TlvDq8ikWAM", aiProvider: "auto", aiModel: "claude-haiku-5-5", openaiModel: "gpt-4o-mini", teacherVoice: true, textSize: "normal", font: "normal", calm: false, autoRead: true, v3: true, v4: true });
+    voiceEngine: "auto", kokoroVoice: "af_heart", aiVoice: "nova", elevenVoice: "21m00Tcm4TlvDq8ikWAM", aiProvider: "auto", aiModel: "claude-haiku-5-5", openaiModel: "gpt-4o-mini", teacherVoice: true, textSize: "normal", font: "normal", calm: false, autoRead: true, v3: true, v4: true });
   // Settings saved before shuffling became the default keep their choices, except the old default order, which becomes shuffle.
   const upgrade = (st) => { if (!st.v3) { if (st.order === "order") st.order = "shuffle"; st.v3 = true; } if (!st.v4) { if (!st.voiceEngine || st.voiceEngine === "device") st.voiceEngine = "auto"; st.v4 = true; } return st; };
   const emptyRewards = () => ({ gems: 0, hearts: { count: 5, last: 0 }, starsByDay: {}, quests: null, badges: {}, chests: {}, freeze: 0, counts: {} });

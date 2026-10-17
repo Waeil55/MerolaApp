@@ -50,8 +50,8 @@ window.GKA = window.GKA || {};
   };
 
   // ----- Which engine speaks -----
-  // auto (the default) uses the best one available: a parent's ElevenLabs or OpenAI key, a connected Puter account
-  // (free, signed in once), the free human voice that runs on this device (Kokoro), then the device's own voice.
+  // auto (the default) uses the best one available: a parent's ElevenLabs or OpenAI key, the free human voice that
+  // runs on this device (Kokoro), then the device's own voice.
   S.AI_VOICES = {
     openai: [["nova", "Nova (bright, friendly)"], ["coral", "Coral (warm)"], ["shimmer", "Shimmer (soft)"], ["sage", "Sage (calm)"], ["alloy", "Alloy (neutral)"], ["fable", "Fable (storyteller)"], ["echo", "Echo (deep)"], ["ash", "Ash (clear)"]],
     elevenlabs: [["21m00Tcm4TlvDq8ikWAM", "Rachel (warm)"], ["EXAVITQu4vr4xnSDxMaL", "Sarah (soft)"], ["XrExE9yKIg1WjnnlVkGX", "Matilda (friendly)"], ["pFZP5JQG7iQjIQuC4Bku", "Lily (clear)"], ["TX3LPaxmHKxFdv7VOQHJ", "Liam (bright)"], ["onwK4e9ZLuTAKqWW03F9", "Daniel (calm)"]],
@@ -60,15 +60,14 @@ window.GKA = window.GKA || {};
   S.inFrame = (() => { try { return window.top !== window; } catch (e) { return true; } })();
   S.kokoroOK = !S.inFrame && typeof Worker !== "undefined" && typeof WebAssembly !== "undefined" && /^https?:$/.test(location.protocol);
   S.broken = {};
-  S.puterOK = () => { try { return !!(window.puter && window.puter.auth && window.puter.auth.isSignedIn()); } catch (e) { return false; } };
   S.engine = () => {
     const e = settings().voiceEngine || "auto"; const k = S.keys();
-    const has = { elevenlabs: !!k.elevenlabs, openai: !!k.openai, puter: S.puterOK(), kokoro: S.kokoroOK, device: true };
-    const order = e === "auto" ? ["elevenlabs", "openai", "puter", "kokoro", "device"] : [e, "kokoro", "device"];
+    const has = { elevenlabs: !!k.elevenlabs, openai: !!k.openai, kokoro: S.kokoroOK, device: true };
+    const order = e === "auto" ? ["elevenlabs", "openai", "kokoro", "device"] : [e, "kokoro", "device"];
     for (const x of order) if (has[x] && !S.broken[x]) return x;
     return "device";
   };
-  S.engineLabel = () => ({ device: "Voice on this device", openai: "OpenAI AI voice", elevenlabs: "ElevenLabs AI voice", puter: "AI voice (Puter, ElevenLabs)", kokoro: "Free human AI voice (on this device)" })[S.engine()];
+  S.engineLabel = () => ({ device: "Voice on this device", openai: "OpenAI AI voice", elevenlabs: "ElevenLabs AI voice", kokoro: "Free human AI voice (on this device)" })[S.engine()];
 
   // ----- Free human voice on this device (Kokoro in a worker) -----
   S.kokoro = { state: "idle", pct: 0 };
@@ -93,20 +92,6 @@ window.GKA = window.GKA || {};
   };
   const kokoroGen = (text, voice, urgent) => { S.kokoroStart(); return new Promise((resolve, reject) => { const job = { id: ++kSeq, text, voice, resolve, reject }; if (urgent) kQueue.unshift(job); else { if (kQueue.length > 60) kQueue.shift(); kQueue.push(job); } kPump(); }); };
 
-  // ----- Puter (free account, signed in once by a grown-up): ElevenLabs voice and Claude for Nova -----
-  S.puterLoad = () => new Promise((resolve) => {
-    if (window.puter) return resolve(true); if (S.inFrame) return resolve(false);
-    const s = document.createElement("script"); s.src = "https://js.puter.com/v2/"; s.onload = () => resolve(true); s.onerror = () => resolve(false); document.head.appendChild(s);
-  });
-  S.puterConnect = async () => {
-    const ok = await S.puterLoad(); if (!ok || !window.puter) throw new Error("Could not reach Puter. Check the internet connection.");
-    if (!S.puterOK()) await window.puter.auth.signIn();
-    if (!S.puterOK()) throw new Error("Sign-in was not finished.");
-    if (window.GKA.Store) window.GKA.Store.setting("puter", true);
-    S.broken.puter = false; return true;
-  };
-  S.puterDisconnect = async () => { try { if (window.puter) await window.puter.auth.signOut(); } catch (e) { /* ignore */ } if (window.GKA.Store) window.GKA.Store.setting("puter", false); };
-
   // ----- AI voice clips: memory, then the device cache, then the engine -----
   const memo = new Map(); const inflight = new Map();
   const CACHE = "gka-voice-v1";
@@ -115,12 +100,6 @@ window.GKA = window.GKA || {};
   const aiVoice = (eng) => eng === "openai" ? (settings().aiVoice || "nova") : eng === "kokoro" ? (settings().kokoroVoice || "af_heart") : (settings().elevenVoice || "21m00Tcm4TlvDq8ikWAM");
   async function fetchClip(eng, voice, text, urgent) {
     if (eng === "kokoro") return kokoroGen(text, voice, urgent);
-    if (eng === "puter") {
-      let a;
-      try { a = await window.puter.ai.txt2speech(text, { provider: "elevenlabs", model: "eleven_flash_v2_5", voice }); }
-      catch (e) { a = await window.puter.ai.txt2speech(text, { provider: "openai", model: "gpt-4o-mini-tts", voice: settings().aiVoice || "nova", instructions: "A warm, cheerful teacher reading to a child." }); }
-      const r = await fetch(a.src); return r.blob();
-    }
     const k = S.keys();
     let res;
     if (eng === "openai") {
@@ -273,7 +252,6 @@ window.GKA = window.GKA || {};
   // Start the free human voice in the background once the app is open (not on a phone that asks to save data).
   S.boot = () => {
     const st = settings();
-    if (st.puter && !S.inFrame) S.puterLoad();
     const saveData = navigator.connection && navigator.connection.saveData;
     if (S.engine() === "kokoro" && !saveData) setTimeout(S.kokoroStart, 1200);
   };

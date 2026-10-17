@@ -300,19 +300,19 @@ window.GKA = window.GKA || {};
   // ---- Voice and AI teacher (parent only). Keys are typed by the parent and stay on this device, outside backups. ----
   const kokoroLine = () => { const k = Speech.kokoro || {}; if (!Speech.kokoroOK) return "The free human voice works in the web app (not inside the Claude app)."; if (k.state === "ready") return "Free human voice: ready on this device."; if (k.state === "loading") return "Free human voice: downloading once, " + (k.pct || 0) + "% (the device voice speaks until it is ready)."; if (k.state === "failed") return "Free human voice could not start on this device" + (k.error ? " (" + k.error + ")" : "") + "."; return "Free human voice: starts downloading when the app opens (about 90 MB, once)."; };
   function aiCard(s) {
-    const k = Speech.keys(); const st = s.settings; const T = window.GKA.Teacher; const puter = Speech.puterOK();
+    const k = Speech.keys(); const st = s.settings; const T = window.GKA.Teacher;
     const keyField = (id, label, val, help) => field(label, '<input class="input" id="' + id + '" type="password" autocomplete="off" spellcheck="false" placeholder="' + (val ? "Saved on this device (type to replace)" : "Paste key here") + '">' + '<div class="small muted" style="margin-top:4px">' + help + "</div>");
     return '<div class="dash-card" style="margin-top:16px"><h3>Voice and AI teacher</h3>' +
       '<div class="ai-status"><div><span class="small muted">Voice now</span><b id="ai-voice-now">' + U.esc(Speech.engineLabel()) + '</b></div><div><span class="small muted">Nova teacher</span><b id="ai-teach-now">' + U.esc(T ? T.providerLabel() : "Built-in help") + '</b></div></div>' +
       '<div class="small" id="ai-kokoro" style="margin-top:8px">' + U.esc(kokoroLine()) + "</div>" +
-      '<div class="small muted" style="margin-top:8px">Without any setup the app uses a free human-sounding AI voice that runs on this device. For the fastest cloud voice and a Claude teacher that answers anything, connect a free Puter account once (you sign in, Puter gives a free monthly allowance), or add your own keys below.</div>' +
-      '<div class="row wrap" style="margin-top:12px">' + (puter ? '<span class="chip green">' + UI.icon("check") + ' Puter connected</span><button class="btn flat" id="ai-puter-off">Disconnect</button>' : '<button class="btn primary" id="ai-puter">' + UI.icon("sparkle") + " Connect free AI (Puter)</button>") + '<button class="btn" id="ai-testv">' + UI.icon("ear") + ' Test voice</button><button class="btn" id="ai-testt">' + UI.icon("chat") + " Test Nova</button></div>" +
+      '<div class="small muted" style="margin-top:8px">Without any setup the app uses a free human-sounding AI voice that runs on this device, and Nova gives built-in help. To let Nova answer anything like a real teacher, add an Anthropic (Claude) key. For the fastest cloud voice, add an ElevenLabs key. In the Claude app version, Nova already uses Claude for free.</div>' +
+      '<div class="row wrap" style="margin-top:12px">' + '<button class="btn" id="ai-testv">' + UI.icon("ear") + ' Test voice</button><button class="btn" id="ai-testt">' + UI.icon("chat") + " Test Nova</button></div>" +
       '<div class="setting-grid" style="margin-top:12px">' +
-        field("Voice", sel("ai-engine", [["auto", "Automatic: best voice available"], ["kokoro", "Free human voice (on this device)"], ["puter", "AI voice with Puter (ElevenLabs)"], ["elevenlabs", "ElevenLabs (your key)"], ["openai", "OpenAI (your key)"], ["device", "Device voice only"]], st.voiceEngine || "auto")) +
+        field("Voice", sel("ai-engine", [["auto", "Automatic: best voice available"], ["kokoro", "Free human voice (on this device)"], ["elevenlabs", "ElevenLabs (your key)"], ["openai", "OpenAI (your key)"], ["device", "Device voice only"]], st.voiceEngine || "auto")) +
         field("Human voice", sel("ai-kvoice", Speech.AI_VOICES.kokoro, st.kokoroVoice || "af_heart")) +
-        field("ElevenLabs / Puter voice", sel("ai-evoice", Speech.AI_VOICES.elevenlabs, st.elevenVoice || "21m00Tcm4TlvDq8ikWAM")) +
+        field("ElevenLabs voice", sel("ai-evoice", Speech.AI_VOICES.elevenlabs, st.elevenVoice || "21m00Tcm4TlvDq8ikWAM")) +
         field("OpenAI voice", sel("ai-ovoice", Speech.AI_VOICES.openai, st.aiVoice || "nova")) +
-      '</div><details class="ai-keys" style="margin-top:12px"><summary>Use your own keys (fastest)</summary><div class="setting-grid" style="margin-top:10px">' +
+      '</div><details class="ai-keys" open style="margin-top:12px"><summary>Keys for Nova and the fastest voice</summary><div class="setting-grid" style="margin-top:10px">' +
         field("Nova teacher uses", sel("ai-prov", [["auto", "Automatic (best available)"], ["anthropic", "Claude (Anthropic key)"], ["openai", "OpenAI (OpenAI key)"]], st.aiProvider || "auto")) +
         field("Claude model", sel("ai-model", [["claude-haiku-5-5", "Fastest: Claude Haiku 5.5"], ["claude-sonnet-5-5", "Smartest: Claude Sonnet 5.5"]], st.aiModel || "claude-haiku-5-5")) +
         field("OpenAI chat model", '<input class="input" id="ai-omodel" value="' + U.esc(st.openaiModel || "gpt-4o-mini") + '" autocomplete="off" spellcheck="false">') +
@@ -339,8 +339,6 @@ window.GKA = window.GKA || {};
       status("Saved. Voice: " + Speech.engineLabel() + ".", true);
     };
     q("ai-save").onclick = save;
-    const pb = q("ai-puter"); if (pb) pb.onclick = async () => { status("Opening Puter sign-in..."); try { await Speech.puterConnect(); status("Puter connected. Nova now uses Claude and the voice uses ElevenLabs.", true); V.parent(root); } catch (e) { status((e && e.message) || "Puter sign-in did not finish.", false); } };
-    const po = q("ai-puter-off"); if (po) po.onclick = async () => { await Speech.puterDisconnect(); V.parent(root); };
     q("ai-testv").onclick = async () => {
       save(); const eng = Speech.engine();
       if (eng === "kokoro" && Speech.kokoro.state !== "ready") { Speech.kokoroStart(); status("The free human voice is still downloading (" + (Speech.kokoro.pct || 0) + "%). Try again in a minute; the device voice speaks for now.", false); Speech.speak("Hi! This is the device voice while the human voice downloads.", { engine: "device" }); return; }
@@ -350,7 +348,7 @@ window.GKA = window.GKA || {};
     };
     q("ai-testt").onclick = async () => {
       save(); const T = window.GKA.Teacher;
-      if (!T || !T.provider()) return status("Nova has built-in help only. Tap Connect free AI (Puter) or add a key to let Nova answer anything.", false);
+      if (!T || !T.provider()) return status("Nova has built-in help only. Add an Anthropic (Claude) or OpenAI key to let Nova answer anything.", false);
       status("Asking Nova...");
       try { const t = await T.test(); status("Nova says: " + t, true); } catch (e) { status("Teacher error: " + ((e && (e.message || e.code)) || e), false); }
     };
