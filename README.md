@@ -84,7 +84,7 @@ Serve the folder over http or https (not from a file) and the browser offers **I
 
 ## Deploy
 
-The folder is a complete static site. `.github/workflows/deploy-pages.yml` publishes it to GitHub Pages on every push to `main`; the one-time setup is Settings > Pages > Build and deployment > Source: GitHub Actions, then re-run the workflow from the Actions tab. The app then lives at https://waeil55.github.io/MerolaApp/ and can be installed from a phone. It also runs on Netlify, Vercel or any web server. The `.nojekyll` file keeps Pages from touching the files.
+The app is live at **https://waeil55.github.io/MerolaApp/** as an installable web app. GitHub Pages publishes the `main` branch (Settings > Pages > Deploy from a branch, main, root), so every push to `main` updates the site within a minute or two. Run `node tools/build-sw.js` before pushing when files are added, so the offline cache list stays complete. The `.nojekyll` file keeps Pages from touching the files. The folder also runs on Netlify, Vercel or any web server.
 
 ## Files
 
