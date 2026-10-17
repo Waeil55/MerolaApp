@@ -62,7 +62,7 @@ window.GKA = window.GKA || {};
   S.kokoroOK = !S.inFrame && typeof Worker !== "undefined" && typeof WebAssembly !== "undefined" && /^https?:$/.test(location.protocol);
   S.broken = {};
   // The app's voice server. It answers a quick check when the app opens; until it says ready, the other voices speak.
-  S.CLOUD_URL = "https://bgkugdyrqtsglavoghvb.supabase.co/functions/v1/kids-tts";
+  S.CLOUD_URL = "https://tfqcgakqhnmkyhwbgeth.supabase.co/functions/v1/kids-tts";
   S.cloud = { state: "idle" };
   S.cloudCheck = () => {
     if (S.cloud.state === "checking" || S.cloud.state === "ready") return S.cloud.p || Promise.resolve(S.cloud.state === "ready");
