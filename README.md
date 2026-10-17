@@ -62,7 +62,7 @@ Serve the folder over http or https (not from a file) and the browser offers **I
 
 ## Deploy
 
-The folder is a complete static site. Push it to GitHub and turn on GitHub Pages (Settings > Pages > Deploy from branch, main, root), or drop it on Netlify, Vercel or any web server. The `.nojekyll` file keeps Pages from touching the files.
+The folder is a complete static site. `.github/workflows/deploy-pages.yml` publishes it to GitHub Pages on every push to `main`; the one-time setup is Settings > Pages > Source: GitHub Actions. The app then lives at https://waeil55.github.io/MerolaApp/ and can be installed from a phone. It also runs on Netlify, Vercel or any web server. The `.nojekyll` file keeps Pages from touching the files.
 
 ## Files
 
