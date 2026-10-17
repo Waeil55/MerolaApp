@@ -28,6 +28,10 @@ window.GKA = window.GKA || {};
         const L = levels.find((x) => x.n === +n); const ex = part.levels[n]; if (!L) continue;
         if (ex.words) L.words = L.words.concat(ex.words.map(normWord));
         if (ex.story2) L.stories = L.stories.concat([ex.story2]);
+        if (ex.stories) L.stories = L.stories.concat(ex.stories);
+        if (ex.items) L.items = (L.items || []).concat(ex.items);
+        if (ex.vocab) L.vocab = (L.vocab || []).concat(ex.vocab);
+        if (ex.sort) L.sort = (L.sort || []).concat(ex.sort);
         if (ex.questions) L.questions = (L.questions || []).concat(ex.questions);
         if (ex.lesson2) L.lesson = (L.lesson || "") + " " + ex.lesson2;
         if (ex.words2) L.words = L.words.concat(ex.words2.map(normWord));
@@ -76,6 +80,7 @@ window.GKA = window.GKA || {};
   const hasWordIn = (w) => w.s && new RegExp("\\b" + w.w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(w.s);
   const sentenceWords = (s) => s.replace(/\s+/g, " ").trim().split(" ");
   // Take k words for this run, rotating through the level so replays cover everything.
+  const rotate = (arr, k, plays) => { if (arr.length <= k) return arr.slice(); const start = ((plays || 0) * k) % arr.length; const out = []; for (let i = 0; i < k; i++) out.push(arr[(start + i) % arr.length]); return out; };
   const take = (words, k, order, plays) => { if (words.length <= k) return words.slice(); if (order === "random") return U.shuffle(words).slice(0, k); const start = ((plays || 0) * k) % words.length; const out = []; for (let i = 0; i < k; i++) out.push(words[(start + i) % words.length]); return out; };
 
   /* Build the deck. opts: { subject, n, mode, order, source, size } */
@@ -121,15 +126,15 @@ window.GKA = window.GKA || {};
         if (g >= 1) for (const w of U.shuffle(withSentence.filter((x) => { const c = sentenceWords(x.s).length; return c >= 3 && c <= 8; })).slice(0, 2)) deck.push({ type: "sentence", sentence: w.s, word: w.w, tiles: U.shuffle(sentenceWords(w.s)), graded: true });
       }
     } else if (mode === "story" && L && L.stories && L.stories.length) {
-      const story = L.stories[plays % L.stories.length];
+      const pick = Number.isInteger(opts.story) ? opts.story : plays; const story = L.stories[((pick % L.stories.length) + L.stories.length) % L.stories.length];
       deck.push({ type: "story-listen", story, graded: false });
       deck.push({ type: "story-words", story, graded: false });
       if (E.storyQuestionCards) deck.push(...E.storyQuestionCards(story, true));
       else for (const q of story.questions) deck.push({ type: "question", q: q.q, options: U.shuffle(q.o), answer: q.o[q.a], graded: true, word: q.q });
     } else if (mode === "learn" && L && L.lesson) {
       deck.push({ type: "lesson", lesson: L.lesson, words: L.words.map((w) => w.w), name: L.name, graded: false });
-      if (E.lessonQuestionCards) deck.push(...E.lessonQuestionCards(L.lesson, L.name, (L.questions || []).slice(0, 6), true, quizCard));
-      else for (const q of (L.questions || []).slice(0, 6)) deck.push(quizCard(q));
+      if (E.lessonQuestionCards) deck.push(...E.lessonQuestionCards(L.lesson, L.name, rotate(L.questions || [], 6, plays), true, quizCard));
+      else for (const q of rotate(L.questions || [], 6, plays)) deck.push(quizCard(q));
     } else if (mode === "quiz" && L && L.questions) {
       if (E.lessonQuestionCards && L.lesson) deck.push(...E.lessonQuestionCards(L.lesson, L.name, U.shuffle(L.questions).slice(0, 10), false, quizCard));
       else for (const q of U.shuffle(L.questions).slice(0, 10)) deck.push(quizCard(q));

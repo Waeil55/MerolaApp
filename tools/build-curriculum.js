@@ -9,7 +9,7 @@ global.window = { GKA: { U: { shuffle: (a) => a.slice() }, Store: {}, Engine: { 
 for (const f of ["content/math-lib.js", "content/math-more.js"]) new Function("window", fs.readFileSync(path.join(root, f), "utf8"))(window);
 for (const [g] of GRADES) for (const f of fs.readdirSync(path.join(root, "content", g)).filter((f) => f.endsWith(".js")).sort()) new Function("window", fs.readFileSync(path.join(root, "content", g, f), "utf8"))(window);
 const table = {}, stages = {};
-for (const p of window.GKA.contentParts) { const k = p.grade + ":" + p.subject; (table[k] = table[k] || []).push(...p.levels); if (p.stages) stages[k] = p.stages; }
+for (const p of window.GKA.contentParts) { if (p.extra) continue; const k = p.grade + ":" + p.subject; (table[k] = table[k] || []).push(...p.levels); if (p.stages) stages[k] = p.stages; }
 const esc = (s) => String(s || "").replace(/\|/g, "\\|");
 let md = "# Genius Kids Academy curriculum\n\nEvery grade has its own 50 levels in each of the four subjects: 7 grades x 4 subjects x 50 levels = 1,400 levels.\nThis file is generated from the content files by `node tools/build-curriculum.js`.\n";
 for (const [g, gname] of GRADES) {

@@ -20,7 +20,22 @@ const words = (s) => String(s || "").trim().split(/\s+/).filter(Boolean).length;
 const LITERAL = ["who", "what", "where", "when", "how", "why", "fact"];
 const table = {};
 for (const g of GRADES) for (const s of SUBJECTS) table[g + ":" + s] = [];
-for (const p of window.GKA.contentParts) { if (!table[p.grade + ":" + p.subject]) { err("unknown grade or subject " + p.grade + "/" + p.subject); continue; } table[p.grade + ":" + p.subject].push(...p.levels); }
+for (const p of window.GKA.contentParts) { if (p.extra) continue; if (!table[p.grade + ":" + p.subject]) { err("unknown grade or subject " + p.grade + "/" + p.subject); continue; } table[p.grade + ":" + p.subject].push(...p.levels.map((L) => Object.assign({}, L, { stories: [L.story, L.story2].filter(Boolean) }))); }
+// Extra parts add words, stories, questions, lesson text, passages and sentences to levels that already exist (same merge as js/engine.js).
+let extraLevels = 0;
+for (const p of window.GKA.contentParts) {
+  if (!p.extra) continue; const levels = table[p.grade + ":" + p.subject]; if (!levels) { err("extra for unknown grade or subject " + p.grade + "/" + p.subject); continue; }
+  for (const n in p.levels) {
+    const L = levels.find((x) => x.n === +n); const ex = p.levels[n]; if (!L) { err(p.grade + " " + p.subject + " extra for missing level " + n); continue; } extraLevels++;
+    if (ex.words) L.words = (L.words || []).concat(ex.words);
+    if (ex.stories) L.stories = L.stories.concat(ex.stories);
+    if (ex.questions) L.questions = (L.questions || []).concat(ex.questions);
+    if (ex.lesson2) L.lesson = (L.lesson || "") + " " + ex.lesson2;
+    if (ex.items) L.items = (L.items || []).concat(ex.items);
+    if (ex.vocab) L.vocab = (L.vocab || []).concat(ex.vocab);
+    if (ex.sort) L.sort = (L.sort || []).concat(ex.sort);
+  }
+}
 
 function checkStory(at, st) {
   if (!st || !st.title || !st.text) return err(at + " story needs title and text");
@@ -31,7 +46,8 @@ function checkReading(at, L) {
   if (!L.words || L.words.length < (L.letters ? 8 : 12)) err(at + " needs " + (L.letters ? 8 : 12) + "+ words (has " + (L.words || []).length + ")");
   for (const w of L.words || []) { const ok = Array.isArray(w) ? w.length >= 2 && w[0] && w[w.length - 1] : w && w.w && w.s; if (!ok) err(at + " bad word entry " + JSON.stringify(w)); }
   const ws = (L.words || []).map((w) => String(Array.isArray(w) ? w[0] : w.w).toLowerCase()); if (!L.letters && !uniq(ws)) warn(at + " repeats a word: " + ws.filter((w, i) => ws.indexOf(w) !== i).join(", "));
-  checkStory(at, L.story); if (L.story2) checkStory(at, L.story2); else warn(at + " has one story");
+  if (!L.stories.length) err(at + " needs a story"); for (const st of L.stories) checkStory(at, st); if (L.stories.length < 2) warn(at + " has one story");
+  const titles = L.stories.map((st) => st && st.title); if (!uniq(titles)) warn(at + " repeats a story title");
   if (typeof L.speed !== "number") err(at + " needs speed");
 }
 function checkScience(at, L) {
@@ -109,7 +125,13 @@ for (const g of GRADES) {
 }
 function compact(a) { const out = []; for (let i = 0; i < a.length; i++) { let j = i; while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++; out.push(i === j ? a[i] : a[i] + "-" + a[j]); i = j; } return out.join(","); }
 console.log(lines.join("\n"));
-console.log("\nlevels: " + done + " / " + total);
+console.log("\nlevels: " + done + " / " + total + (extraLevels ? "  (extra content added to " + extraLevels + " levels)" : ""));
+const sum = { words: 0, stories: 0, storyQuestions: 0, scienceQuestions: 0, lessonWords: 0, passages: 0, passageQuestions: 0, sentences: 0 };
+for (const [k, levels] of Object.entries(table)) for (const L of levels) { const s = k.split(":")[1];
+  if (s === "reading") { sum.words += (L.words || []).length; sum.stories += L.stories.length; L.stories.forEach((st) => sum.storyQuestions += st.questions.length); }
+  if (s === "science") { sum.words += (L.words || []).length; sum.scienceQuestions += (L.questions || []).length; sum.lessonWords += words(L.lesson); }
+  if (s === "understand") { for (const it of L.items || []) { if (it.text) { sum.passages++; sum.passageQuestions += (it.qs || []).length; } else sum.sentences++; } sum.sentences += (L.vocab || []).length + (L.sort || []).length; } }
+console.log("content: " + Object.entries(sum).map(([k, v]) => k + " " + v).join(", "));
 const missingOnly = errors.filter((e) => /missing \d+ levels/.test(e)).length;
 if (!quiet && warns.length) { console.log("\nwarnings (" + warns.length + "):"); warns.slice(0, 40).forEach((w) => console.log("  - " + w)); if (warns.length > 40) console.log("  ..."); }
 const real = errors.filter((e) => !/missing \d+ levels/.test(e));

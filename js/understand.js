@@ -114,7 +114,10 @@ window.GKA = window.GKA || {};
       return deck;
     }
     if (L.items && L.items.length && L.items[0].t) { const items = guided ? rotate(L.items, 8, plays) : U.shuffle(L.items).slice(0, 8); for (const it of items) deck.push(sentenceCard(it, guided)); return deck; }
-    for (const it of L.items) {
+    // Levels can hold many passages: each run takes a window of them (at least 6 questions), and the window moves on every replay.
+    const pool = L.items; let start = pool.length > 1 ? (plays * 2) % pool.length : 0; const chosen = []; let qn = 0;
+    for (let i = 0; i < pool.length && (qn < 6 || chosen.length < 1); i++) { const it = pool[(start + i) % pool.length]; chosen.push(it); qn += (it.qs || []).length; }
+    for (const it of chosen) {
       const passage = E.passageOf(it);
       const qs = it.qs.map((q) => Object.assign({}, q, { ev: q.e ? locate(passage.paras, q.e) : null }));
       if (guided && passage.paras.length > 1) {
