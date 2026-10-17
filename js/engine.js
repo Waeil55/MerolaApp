@@ -33,7 +33,8 @@ window.GKA = window.GKA || {};
         if (ex.items) L.items = (L.items || []).concat(ex.items);
         if (ex.vocab) L.vocab = (L.vocab || []).concat(ex.vocab);
         if (ex.sort) L.sort = (L.sort || []).concat(ex.sort);
-        if (ex.questions) L.questions = (L.questions || []).concat(ex.questions);
+        // A question already in the level (same wording and answer) is not added twice.
+        if (ex.questions) { const qSig = (q) => [q.q, q.o ? q.o[0] : q.items ? q.items.join("/") : String(q.a)].join("|").toLowerCase(); const have = new Set((L.questions || []).map(qSig)); L.questions = (L.questions || []).concat(ex.questions.filter((q) => !have.has(qSig(q)) && have.add(qSig(q)))); }
         if (ex.lesson2) L.lesson = (L.lesson || "") + " " + ex.lesson2;
         if (ex.words2) addWords(ex.words2);
       }
