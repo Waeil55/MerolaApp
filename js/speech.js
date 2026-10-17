@@ -89,7 +89,7 @@ window.GKA = window.GKA || {};
     for (const x of order) if (has[x] && !S.broken[x]) return x;
     return "device";
   };
-  S.engineLabel = () => ({ device: "Voice on this device", openai: "OpenAI AI voice", elevenlabs: "ElevenLabs AI voice", cloud: "AI human voice (OpenAI, same as Mariam)", kokoro: "Free human AI voice (on this device)" })[S.engine()];
+  S.engineLabel = () => (S.rec && S.rec.state === "ready" && recWanted() ? "Recorded human voice for lessons, then " : "") + ({ device: "Voice on this device", openai: "OpenAI AI voice", elevenlabs: "ElevenLabs AI voice", cloud: "AI human voice (OpenAI, same as Mariam)", kokoro: "Free human AI voice (on this device)" })[S.engine()];
 
   // ----- Free human voice on this device (Kokoro in a worker) -----
   S.kokoro = { state: "idle", pct: 0 };
@@ -261,6 +261,58 @@ window.GKA = window.GKA || {};
     });
   }
 
+  // ----- Recorded voice: every lesson word and sentence, recorded once with the free human voice (Kokoro, af_heart)
+  // and published with the app in audio/v1. Instant, free, the same on every device. audio/v1/index.txt lists what is recorded.
+  const VK = window.GKA.VoiceKey;
+  const REC_DIR = "audio/v1/";
+  let recSet = null;
+  S.rec = { state: "idle", count: 0 };
+  S.recLoad = () => {
+    if (S.rec.p) return S.rec.p;
+    if (!VK || !/^https?:$/.test(location.protocol) || typeof fetch === "undefined") { S.rec.state = "off"; return Promise.resolve(false); }
+    S.rec.state = "loading";
+    S.rec.p = fetch(REC_DIR + "index.txt").then((r) => (r.ok ? r.text() : "")).catch(() => "").then((t) => {
+      const keys = t.split(/\s+/).filter(Boolean); recSet = new Set(keys); S.rec.count = keys.length; S.rec.state = keys.length ? "ready" : "off";
+      window.dispatchEvent(new Event("gka-voice")); return keys.length > 0;
+    });
+    return S.rec.p;
+  };
+  // The recordings are the Kokoro "Heart" voice, so they are used unless a grown-up picked another voice.
+  const recWanted = () => { const st = settings(); const e = st.voiceEngine || "auto"; return e === "auto" || e === "rec" || (e === "kokoro" && (st.kokoroVoice || "af_heart") === "af_heart"); };
+  const recHas = (segs) => !!recSet && segs.length > 0 && segs.every((s) => recSet.has(VK.key(s.t)));
+  S.recCovers = (text) => { if (!recSet || !recWanted()) return null; const segs = VK.segments(text); return recHas(segs) ? segs : null; };
+  function getRec(seg) {
+    const k = VK.key(seg); const url = REC_DIR + k.slice(0, 2) + "/" + k + ".mp3"; const key = "rec/" + k;
+    if (memo.has(key)) return Promise.resolve(memo.get(key));
+    if (inflight.has(key)) return inflight.get(key);
+    const p = (async () => {
+      const abs = new URL(url, location.href).href; let blob = null;
+      try { if (window.caches) { const c = await caches.open(CACHE); const hit = await c.match(abs); if (hit) blob = await hit.blob(); } } catch (e) { /* no cache here */ }
+      if (!blob) {
+        const r = await fetch(url); if (!r.ok) throw new Error("HTTP " + r.status); blob = await r.blob();
+        try { if (window.caches) { const c = await caches.open(CACHE); await c.put(abs, new Response(blob, { headers: { "Content-Type": "audio/mpeg" } })); } } catch (e) { /* cache full or blocked */ }
+      }
+      const obj = URL.createObjectURL(blob); memo.set(key, obj);
+      if (memo.size > 500) { const first = memo.keys().next().value; URL.revokeObjectURL(memo.get(first)); memo.delete(first); }
+      return obj;
+    })();
+    inflight.set(key, p); p.then(() => inflight.delete(key), () => inflight.delete(key));
+    return p;
+  }
+  async function speakRec(segs, opts) {
+    const my = ++token;
+    let next = getRec(segs[0].t);
+    for (let i = 0; i < segs.length; i++) {
+      const url = await next;
+      if (my !== token) return false;
+      if (i + 1 < segs.length) { next = getRec(segs[i + 1].t); next.catch(() => {}); }
+      const sg = segs[i];
+      const ok = await playUrl(url, opts.rate, opts.onBoundary ? (f) => opts.onBoundary(Math.round(sg.at + f * sg.t.length)) : null, my);
+      if (!ok || my !== token) return false;
+    }
+    return true;
+  }
+
   /* Speak text. Resolves true when it finished, false when stopped or failed.
      opts: rate, pitch, voiceURI, engine (force one), patient (wait longer for the human voice, for teacher answers),
      onBoundary(charIndex). */
@@ -269,7 +321,13 @@ window.GKA = window.GKA || {};
     text = String(text || "").trim();
     if (!text) return false;
     S.stop();
-    const eng = opts.engine || S.engine();
+    // Lesson text that is recorded plays at once; anything else (Nova's answers, names) uses the voices below.
+    if (!opts.engine || opts.engine === "rec") {
+      const segs = S.recCovers(text);
+      if (segs) { try { return await speakRec(segs, opts); } catch (e) { S.lastError = (e && e.message) || "Recorded voice failed"; } }
+    }
+    text = text.replace(/\s*\|\s*/g, " ").trim(); // "|" only marks where recordings join; it is never said
+    const eng = opts.engine && opts.engine !== "rec" ? opts.engine : S.engine();
     if (eng !== "device") {
       try { return await speakAI(eng, text, opts); }
       catch (e) {
@@ -285,17 +343,20 @@ window.GKA = window.GKA || {};
   };
   // Make AI clips ahead of time: the whole lesson for the voice on this device, the next cards for cloud voices.
   S.prefetch = (texts) => {
+    const rest = [];
+    (texts || []).filter((t) => typeof t === "string" && t.trim()).forEach((t) => { const segs = S.recCovers(t); if (segs) segs.slice(0, 3).forEach((s) => getRec(s.t).catch(() => {})); else rest.push(t.replace(/\s*\|\s*/g, " ")); });
     const eng = S.engine(); if (eng === "device") return;
     if (eng !== "kokoro" && !navigator.onLine) return;
-    const list = (texts || []).filter((t) => typeof t === "string" && t.trim()).slice(0, eng === "kokoro" ? 30 : 6);
+    const list = rest.slice(0, eng === "kokoro" ? 30 : 6);
     list.forEach((t) => { const c = chunksOf(t, chunkMax(eng))[0]; getClip(eng, c.t).catch(() => {}); });
   };
   // Start the free human voice in the background once the app is open (not on a phone that asks to save data).
   S.boot = () => {
     const saveData = navigator.connection && navigator.connection.saveData;
+    S.recLoad();
     S.cloudCheck().then(() => { if (S.engine() === "kokoro" && !saveData) setTimeout(S.kokoroStart, 1200); });
   };
-  S.test = async (eng, sample) => { S.broken = {}; S.lastError = ""; if (eng === "cloud" && S.cloud.state !== "ready") { S.cloud.state = "idle"; if (!(await S.cloudCheck())) throw new Error("The AI voice server is not reachable yet"); } const t = sample || "Hi! I am Nova, your teacher. Let's learn something amazing today."; if (eng === "device") return speakDevice(t, {}); return speakAI(eng, t, { patient: true }); };
+  S.test = async (eng, sample) => { S.broken = {}; S.lastError = ""; if (eng === "rec") { await S.recLoad(); const segs = VK ? VK.segments("This is how I sound. Learning is fun!") : []; if (!recHas(segs)) throw new Error("The recorded voice is not ready yet"); return speakRec(segs, {}); } if (eng === "cloud" && S.cloud.state !== "ready") { S.cloud.state = "idle"; if (!(await S.cloudCheck())) throw new Error("The AI voice server is not reachable yet"); } const t = sample || "Hi! I am Nova, your teacher. Let's learn something amazing today."; if (eng === "device") return speakDevice(t, {}); return speakAI(eng, t, { patient: true }); };
   S.clearVoiceCache = async () => { memo.forEach((u) => URL.revokeObjectURL(u)); memo.clear(); try { if (window.caches) await caches.delete(CACHE); } catch (e) { /* ignore */ } };
   S.stop = () => {
     token++;

@@ -18,6 +18,7 @@ self.addEventListener("message", (e) => { if (e.data === "skipWaiting") self.ski
 self.addEventListener("fetch", (e) => {
   const req = e.request; if (req.method !== "GET") return;
   const url = new URL(req.url);
+  if (/\/audio\/.+\.mp3$/.test(url.pathname)) return;
   if (url.origin === location.origin) {
     // App files: network first so updates arrive at once; the cache answers when offline or after 3.5 seconds.
     const cacheKey = req.mode === "navigate" ? "./" : req;

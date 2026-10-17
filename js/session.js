@@ -175,7 +175,7 @@ window.GKA = window.GKA || {};
   }
   function bindLetters() { const host = $("#letters"); if (!host) return; host.querySelectorAll(".letter-btn").forEach((b) => { b.onclick = () => { b.classList.add("hot"); later(() => b.classList.remove("hot"), 500); Speech.speak(b.textContent, { rate: 0.8 }); }; }); }
   const sayWord = (c, slow) => { const text = c.letter && c.hint ? c.word + ". " + c.word + " is for " + c.hint + "." : c.word; return Speech.speak(text, { rate: slow ? 0.55 : settings().rate }); };
-  const saySentence = (c) => Speech.speak(c.sentence || ("The word is " + c.word + "."), { rate: settings().rate });
+  const saySentence = (c) => Speech.speak(c.sentence || ("The word is | " + c.word + "."), { rate: settings().rate });
 
   const RENDER = {};
 
@@ -335,7 +335,7 @@ window.GKA = window.GKA || {};
     actions(nextBtn()); $("#next").disabled = true; bindNext();
     const choose = (val) => { if (st.cur.done) return; const ok = val === c.answer; const first = answer(ok, { heard: val }); $("#opts").querySelectorAll(".option").forEach((x) => { if (x.dataset.w === val) x.classList.add(ok ? "correct" : "wrong"); if (ok && x.dataset.w !== val) x.classList.add("dim"); }); if (ok) { showFeedback("ok", praise(), first && !st.cur.review ? "+1 star" : ""); autoNext(1500); } else showFeedback("no", encourage(), "Think about what you read and try again."); };
     $("#opts").querySelectorAll(".option").forEach((b) => { b.onclick = () => choose(b.dataset.w); });
-    $("#hearq").onclick = () => Speech.speak(c.q + " " + c.options.map((o, i) => (i === 0 ? "Is it " : "or ") + o + "?").join(" "), { rate: settings().rate });
+    $("#hearq").onclick = () => Speech.speak(c.q + " | " + c.options.map((o, i) => (i === 0 ? "Is it | " : "or | ") + o + "?").join(" | "), { rate: settings().rate });
     $("#mic").onclick = () => { if (!Speech.sttOK) return showFeedback("info", "The mic is not available here", "Tap your answer instead."); listenFor(c, c.answer, "", (m, res) => { let bestOpt = null; for (const o of c.options) { const mm = U.matchSpeech(res.alts, o, "forgiving"); if (mm.ok) { bestOpt = o; break; } } if (bestOpt) choose(bestOpt); else showFeedback("info", "I heard \"" + (res.transcript || "…") + "\"", "Say one of the answers, or tap it."); }); };
     later(() => $("#hearq") && $("#hearq").click(), 300);
   };
@@ -653,7 +653,7 @@ window.GKA = window.GKA || {};
     if ($("#next")) { $("#next").disabled = true; bindNext(); }
     const bindWhere = () => { const w = $("#where"); if (w) w.onclick = () => { if (!showEvidence(c, true)) showFeedback("info", t.title, t.tip); }; };
     bindWhere();
-    const sayQ = () => Speech.speak(c.kind === "tf" ? "True or false? " + c.q : c.q + (c.kind === "mc" ? " " + c.options.map((o, i) => (i === 0 ? "Is it: " : "or: ") + o + "?").join(" ") : ""), { rate: settings().rate });
+    const sayQ = () => Speech.speak(c.kind === "tf" ? "True or false? " + c.q : c.q + (c.kind === "mc" ? " | " + c.options.map((o, i) => (i === 0 ? "Is it | " : "or | ") + o + "?").join(" | ") : ""), { rate: settings().rate });
     $("#hearq").onclick = sayQ;
     if ((c.stage || 3) <= 3 || c.guided || ["kg", "g1", "g2"].includes(Store.grade())) later(sayQ, 450);
     function markCorrect() { const o = $("#opts"); if (!o) return; o.querySelectorAll(".option").forEach((x) => { const v = x.dataset.w; const isAns = c.kind === "tf" ? (v === "true") === c.answer : v === c.answer; x.classList.add(isAns ? "correct" : "dim"); x.disabled = true; }); }

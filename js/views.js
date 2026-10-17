@@ -308,7 +308,7 @@ window.GKA = window.GKA || {};
       '<div class="small muted" style="margin-top:8px">Without any setup the app speaks with the same OpenAI human voice as the Mariam app (from the app voice server, no key needed here), then the free voice that runs on this device, and Nova gives built-in help. To let Nova answer anything like a real teacher, add an Anthropic (Claude) key. For the fastest cloud voice, add an ElevenLabs key. In the Claude app version, Nova already uses Claude for free.</div>' +
       '<div class="row wrap" style="margin-top:12px">' + '<button class="btn" id="ai-testv">' + UI.icon("ear") + ' Test voice</button><button class="btn" id="ai-testt">' + UI.icon("chat") + " Test Nova</button></div>" +
       '<div class="setting-grid" style="margin-top:12px">' +
-        field("Voice", sel("ai-engine", [["auto", "Automatic: best voice available"], ["cloud", "AI human voice (OpenAI, same as Mariam)"], ["kokoro", "Free human voice (on this device)"], ["elevenlabs", "ElevenLabs (your key)"], ["openai", "OpenAI (your key)"], ["device", "Device voice only"]], st.voiceEngine || "auto")) +
+        field("Voice", sel("ai-engine", [["auto", "Automatic: best voice available"], ["rec", "Recorded human voice (free, instant)"], ["cloud", "AI human voice (OpenAI, same as Mariam)"], ["kokoro", "Free human voice (on this device)"], ["elevenlabs", "ElevenLabs (your key)"], ["openai", "OpenAI (your key)"], ["device", "Device voice only"]], st.voiceEngine || "auto")) +
         field("Human voice", sel("ai-kvoice", Speech.AI_VOICES.kokoro, st.kokoroVoice || "af_heart")) +
         field("ElevenLabs voice", sel("ai-evoice", Speech.AI_VOICES.elevenlabs, st.elevenVoice || "21m00Tcm4TlvDq8ikWAM")) +
         field("OpenAI voice (also the voice server)", sel("ai-ovoice", Speech.AI_VOICES.openai, st.aiVoice || "nova")) +
@@ -340,7 +340,12 @@ window.GKA = window.GKA || {};
     };
     q("ai-save").onclick = save;
     q("ai-testv").onclick = async () => {
-      save(); const eng = Speech.engine();
+      save(); const eng = Speech.engine(); const pick = q("ai-engine").value;
+      if (pick === "rec" || (pick === "auto" && Speech.rec.state === "ready")) {
+        try { const ok = await Speech.test("rec"); status(ok ? "That was the recorded human voice (" + Speech.rec.count + " lesson clips on this site)." : "Could not play the recorded voice.", ok); }
+        catch (e) { status((e && e.message) || "The recorded voice is not ready yet.", false); }
+        return;
+      }
       if (eng === "kokoro" && Speech.kokoro.state !== "ready") { Speech.kokoroStart(); status("The free human voice is still downloading (" + (Speech.kokoro.pct || 0) + "%). Try again in a minute; the device voice speaks for now.", false); Speech.speak("Hi! This is the device voice while the human voice downloads.", { engine: "device" }); return; }
       status("Speaking with " + Speech.engineLabel() + "...");
       try { const ok = await Speech.test(eng); status(ok ? "That was " + Speech.engineLabel() + "." : "Could not play the voice." + (Speech.lastError ? " " + Speech.lastError : ""), ok); }
