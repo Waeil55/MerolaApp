@@ -17,19 +17,56 @@ window.GKA = window.GKA || {};
     clearTimers(); Speech.stop(); Speech.cancelListen();
     const deck = E.buildDeck(opts);
     st = Object.assign({}, opts, { deck, idx: 0, results: [], stars: 0, t0: Date.now(), root, cur: null, ring: null });
+    saveResume();
     if (!deck.length) { root.innerHTML = '<div class="screen"><div class="empty">' + UI.icon("words") + '<div>Nothing to practice here yet.</div><a class="btn primary" href="#' + (opts.source === "mywords" ? "words" : "hub-" + opts.subject + "-" + opts.n) + '">Back</a></div></div>'; return; }
     renderFrame(); renderCard();
   };
+  // ----- Finish later: the lesson in progress is saved after every card, so a child can leave and come back. -----
+  const RESUMABLE = ["level", "mix", "review", "brain", "mywords"];
+  const resumeKey = () => "gka.resume." + ((Store.profile() || {}).id || "guest") + "." + Store.grade();
+  function saveResume() {
+    if (!st || !RESUMABLE.includes(st.source) || st.idx >= st.deck.length) return;
+    try { const txt = JSON.stringify({ opts: { subject: st.subject, n: st.n, mode: st.mode, source: st.source, story: st.story }, deck: st.deck, idx: st.idx, results: st.results, stars: st.stars, at: Date.now() }); if (txt.length < 500000) localStorage.setItem(resumeKey(), txt); } catch (e) { /* storage full: no resume */ }
+  }
+  const clearResume = () => { try { localStorage.removeItem(resumeKey()); } catch (e) { /* ignore */ } };
+  S.resumeInfo = () => {
+    try { const d = JSON.parse(localStorage.getItem(resumeKey()) || "null"); if (!d || !d.deck || d.idx >= d.deck.length || Date.now() - d.at > 4 * 864e5) return null; return { subject: d.opts.subject, n: d.opts.n, mode: d.opts.mode, source: d.opts.source, idx: d.idx, total: d.deck.length }; } catch (e) { return null; }
+  };
+  S.resume = (root) => {
+    let d = null; try { d = JSON.parse(localStorage.getItem(resumeKey()) || "null"); } catch (e) { d = null; }
+    if (!d || !d.deck) return false;
+    clearTimers(); Speech.stop(); Speech.cancelListen();
+    st = Object.assign({}, d.opts, { deck: d.deck, idx: d.idx, results: d.results || [], stars: d.stars || 0, t0: Date.now(), root, cur: null, ring: null, resumed: true });
+    renderFrame(); renderCard(); return true;
+  };
+  S.dropResume = clearResume;
   // What is on screen right now, for the AI teacher.
   S.current = () => { if (!st) return null; const c = st.deck[st.idx]; const L = E.level(st.subject, st.n); return { subject: st.subject, n: st.n, mode: st.mode, source: st.source, idx: st.idx, total: st.deck.length, card: c || null, cur: st.cur, levelName: L ? L.name : "", skill: L ? L.skill : "" }; };
   // Text a card will say, so an AI voice can fetch it before the card appears.
   const cardTexts = (c) => { if (!c) return []; const p = c.problem || {}; return [c.word, c.sentence, c.q, p.say, c.passage && c.passage.title].filter((x) => typeof x === "string" && x.length < 400); };
   S.abort = () => { clearTimers(); Speech.stop(); Speech.cancelListen(); if (st) Store.addSeconds(Math.round((Date.now() - st.t0) / 1000)); st = null; };
-  S.next = () => { if (!st) return; const c = st.deck[st.idx]; if (st.source === "placement" && c && c.graded && st.cur && st.cur.first === false) return finishPlacement(); st.idx++; renderCard(); };
+  S.next = () => { if (!st) return; const c = st.deck[st.idx]; if (st.source === "placement" && c && c.graded && st.cur && st.cur.first === false) return finishPlacement(); st.idx++; ease(); saveResume(); renderCard(); };
+  // Two misses in a row: bring the easiest of the next few cards forward and say something kind.
+  function ease() {
+    if (!st || (st.missRun || 0) < 2) return; st.missRun = 0;
+    const from = st.idx, to = Math.min(st.deck.length, st.idx + 6); let best = -1, bd = Infinity;
+    for (let i = from; i < to; i++) { const c = st.deck[i]; if (!c || !c.graded || c.type === "u-read") continue; if (st.deck.slice(from, i).some((x) => x.type === "u-read")) break; const d = E.cardDifficulty(c); if (d < bd) { bd = d; best = i; } }
+    if (best > from) { const [c] = st.deck.splice(best, 1); st.deck.splice(from, 0, c); }
+    showCheer(U.pick(["Let's try an easier one. You've got this!", "Deep breath. Here's a friendlier one!", "Mistakes help your brain grow. Try this one!"]), "wink");
+  }
+  // Combo cheers: three, five, eight... right in a row.
+  const COMBO = { 3: "3 in a row! Nice!", 5: "5 in a row! You're on fire!", 8: "8 in a row! Brain power!", 12: "12 in a row! Unstoppable!", 16: "16 in a row! Genius mode!", 20: "20 in a row! Legendary!" };
+  function cheer(n) { showCheer(COMBO[n] || n + " in a row!", "nova"); Speech.sfx("win"); }
+  function showCheer(text, face) {
+    if (!st) return; const old = document.querySelector(".cheer"); if (old) old.remove();
+    const el = document.createElement("div"); el.className = "cheer"; el.setAttribute("role", "status");
+    el.innerHTML = '<span class="ch-face">' + UI.mascot(face || "nova") + '</span><span class="ch-t">' + U.esc(text) + "</span>";
+    document.body.appendChild(el); setTimeout(() => el.classList.add("out"), 1900); setTimeout(() => el.remove(), 2400);
+  }
 
   const speedSeconds = () => { const sp = settings().speed; if (sp === "level" || sp == null) { const L = E.level(st.subject, st.n); return L ? L.speed : 1; } return Number(sp) || 0; };
   const modeLabel = () => E.modeLabel(st.mode);
-  const levelLabel = () => st.source === "placement" ? "Level check" : st.source === "mywords" ? "My Words" : st.source === "review" ? "Review" : st.source === "mix" ? "Mix practice" : "Level " + st.n;
+  const levelLabel = () => st.source === "placement" ? "Level check" : st.source === "mywords" ? "My Words" : st.source === "review" ? "Review" : st.source === "mix" ? "Mix practice" : st.source === "brain" ? "Brain Boost" : "Level " + st.n;
   const $ = (sel) => st.root.querySelector(sel);
 
   function renderFrame() {
@@ -44,16 +81,17 @@ window.GKA = window.GKA || {};
     $("#exit").onclick = confirmExit;
   }
   function confirmExit() {
-    const m = UI.modal('<h2>Stop the lesson?</h2><p class="muted">Your stars so far are safe. This run will not count for the level.</p><div class="row"><button class="btn grow" id="m-no">Keep going</button><button class="btn red grow" id="m-yes">Stop</button></div>');
+    saveResume();
+    const m = UI.modal('<h2>Take a break?</h2><p class="muted">Your place is saved. Tap Continue on the Learn page to finish this lesson later.</p><div class="row"><button class="btn primary grow" id="m-no">Keep going</button><button class="btn grow" id="m-yes">Leave for now</button></div>');
     m.el.querySelector("#m-no").onclick = m.close;
-    m.el.querySelector("#m-yes").onclick = () => { m.close(); const back = st.source === "placement" ? "home-understand" : st.source === "mywords" ? "words" : st.source === "mix" || st.source === "review" ? "home-" + st.subject : "hub-" + st.subject + "-" + st.n; S.abort(); window.GKA.App.go(back); };
+    m.el.querySelector("#m-yes").onclick = () => { m.close(); const back = st.source === "placement" ? "home-understand" : st.source === "mywords" ? "words" : st.source === "mix" || st.source === "review" || st.source === "brain" ? "practice" : "hub-" + st.subject + "-" + st.n; S.abort(); window.GKA.App.go(back); };
   }
   const HEADINGS = { flash: "Read this word out loud", readcheck: "Which one did you just see?", speak: "Say this word", write: "Look at the word", "story-listen": "Listen to the story", "story-words": "Read it word by word", question: "Answer the question", truefalse: "True or false?", order: "Put it in order", lesson: "Listen and read along", picmatch: "Which word is this picture?", blank: "Fill in the blank", match: "Match the pairs", unscramble: "Unscramble the letters", dictation: "Listen and type the sentence", sentence: "Build the sentence", trace: "Trace the letter", readaloud: "Read the sentence out loud" };
   function heading(text) { const h = $("#heading"); if (h) h.textContent = text; }
   function drawHearts() { const h = $("#hearts"); if (!h) return; if (!RW().heartsOn()) { h.innerHTML = ""; return; } const n = RW().hearts(); let s = ""; for (let i = 0; i < RW().MAX_HEARTS; i++) s += '<span class="' + (i < n ? "on" : "") + '">' + UI.icon("heart") + "</span>"; h.innerHTML = s; }
   function setHead() {
     const c = st.deck[st.idx];
-    $("#meta-r").textContent = "Card " + (st.idx + 1) + " of " + st.deck.length + " · " + modeLabel() + " · " + levelLabel();
+    $("#meta-r").textContent = (c && c.warm ? "Warm-up from Level " + c.warmFrom + " · " : "") + "Card " + (st.idx + 1) + " of " + st.deck.length + " · " + modeLabel() + " · " + levelLabel();
     $("#prog").style.width = Math.round((st.idx / st.deck.length) * 100) + "%";
     $("#starpill span").textContent = "+" + st.stars;
     drawHearts();
@@ -72,7 +110,7 @@ window.GKA = window.GKA || {};
     if (st.idx >= st.deck.length) return finish();
     const c = st.deck[st.idx];
     st.cur = { tries: 0, first: null, done: false, review: c.graded ? E.isReviewCard(st.subject, st.n, st.mode, c.word) : false };
-    if (st.source === "mywords" || st.source === "review" || st.source === "mix") st.cur.review = c.graded ? Store.isMastered(Store.masteryKey(st.subject, st.mode, c.word)) : false;
+    if (st.source === "mywords" || st.source === "review" || st.source === "mix" || st.source === "brain") st.cur.review = c.graded ? Store.isMastered(Store.masteryKey(st.subject, st.mode, c.word)) : false;
     if (st.source === "placement") st.cur.review = true;
     st.reading = false;
     resetBar(); setHead(); below("");
@@ -91,9 +129,12 @@ window.GKA = window.GKA || {};
       st.cur.first = ok;
       const key = Store.masteryKey(st.subject, st.mode, c.word);
       let stars = 0;
-      if (ok) { if (st.source !== "placement") Store.bumpMastery(key); stars = st.cur.review ? 0 : 1; st.stars += stars; }
-      else if (st.source !== "placement") { Store.logMistake({ subject: st.subject, level: st.n, mode: st.mode, word: c.word, said: info && info.heard ? info.heard : "" }); if (RW().heartsOn()) { const left = RW().loseHeart(); const h = $("#hearts"); if (h) { h.classList.add("shake"); later(() => h.classList.remove("shake"), 600); } if (left <= 0) later(outOfHearts, 1200); } }
-      st.results.push({ word: c.word, ok, review: st.cur.review, stars, type: c.type, probe: c.probe });
+      if (c.warm) { stars = 0; }
+      else if (ok) { if (st.source !== "placement") Store.bumpMastery(key); stars = st.cur.review ? 0 : 1; st.stars += stars; }
+      else if (st.source !== "placement" && !c.warm) { Store.logMistake({ subject: st.subject, level: st.n, mode: st.mode, word: c.word, said: info && info.heard ? info.heard : "" }); if (RW().heartsOn()) { const left = RW().loseHeart(); const h = $("#hearts"); if (h) { h.classList.add("shake"); later(() => h.classList.remove("shake"), 600); } if (left <= 0) later(outOfHearts, 1200); } }
+      st.results.push({ word: c.word, ok, review: st.cur.review, stars, type: c.type, probe: c.probe, warm: !!c.warm });
+      if (st.source !== "placement" && Store.srsMark && !c.warm) Store.srsMark(c.srsSubject || st.subject, c.srsLevel || st.n, c.word, ok);
+      if (ok) { st.combo = (st.combo || 0) + 1; st.missRun = 0; if ([3, 5, 8, 12, 16, 20].includes(st.combo)) cheer(st.combo); } else { st.combo = 0; st.missRun = (st.missRun || 0) + 1; }
       setHead();
     }
     if (ok) { st.cur.done = true; Speech.sfx(first && !st.cur.review ? "star" : "ok"); } else Speech.sfx("no");
@@ -122,7 +163,7 @@ window.GKA = window.GKA || {};
   const nextBtn = (label) => '<button class="btn main" id="next">' + U.esc(label || "Continue") + "</button>";
   const bindNext = () => { const b = $("#next"); if (b) b.onclick = () => S.next(); };
   const autoNext = (ms) => later(() => S.next(), ms || 1500);
-  const reviewTag = () => (st.cur.review ? '<span class="review-tag">Review · no new stars</span>' : "");
+  const reviewTag = () => (st.deck[st.idx] && st.deck[st.idx].warm ? '<span class="review-tag warm">Warm-up · from Level ' + st.deck[st.idx].warmFrom + "</span>" : st.cur.review ? '<span class="review-tag">Review · no new stars</span>' : "");
   const praise = () => U.pick(["Nicely done!", "Excellent!", "You got it!", "Great job!", "Super!", "Brilliant!", "Amazing!"]);
   const encourage = () => U.pick(["Not quite. Try again!", "Almost! One more time.", "Keep going, you can do it!", "Listen once more and try again."]);
 
@@ -670,7 +711,8 @@ window.GKA = window.GKA || {};
   // ---------- finish ----------
   function finish() {
     if (st.source === "placement") return finishPlacement();
-    const graded = st.results;
+    clearResume();
+    const graded = st.results.filter((r) => !r.warm);
     const correct = graded.filter((r) => r.ok).length, total = graded.length;
     const review = graded.filter((r) => r.review).length;
     const secs = Math.round((Date.now() - st.t0) / 1000);

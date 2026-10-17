@@ -125,6 +125,18 @@ window.GKA = window.GKA || {};
   Store.bumpMastery = (key) => { const d = P(); d.mastery[key] = (d.mastery[key] || 0) + 1; };
   Store.isMastered = (key) => (P().mastery[key] || 0) >= 2;
   Store.wordStars = (subject, word) => { const modes = ["read", "speak", "listen", "write"]; const done = modes.filter((m) => Store.isMastered(Store.masteryKey(subject, m, word))).length; return Math.min(3, Math.round((done / modes.length) * 3)); };
+  /* Spaced repetition for Brain Boost: every word or question answered gets a box. Right on the first try moves it up a box
+     (back in 1, 2, 4, 7, 14, 30 days); a miss sends it back to box 0 (back tomorrow). Kept per kid and per grade. */
+  const SRS_DAYS = [1, 2, 4, 7, 14, 30];
+  const dayNo = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 864e5);
+  Store.srsMark = (subject, level, word, ok) => {
+    if (!word || String(word).length > 300 || subject === "math") return;
+    const d = P(); d.srs = d.srs || {}; const k = Store.grade() + "|" + subject + "|" + word; const r = d.srs[k] || { s: subject, n: level, w: word, g: Store.grade(), box: -1 };
+    r.box = ok ? Math.min(SRS_DAYS.length - 1, r.box + 1) : 0; r.due = dayNo() + SRS_DAYS[ok ? r.box : 0]; r.n = level || r.n; d.srs[k] = r;
+    const keys = Object.keys(d.srs); if (keys.length > 3000) { keys.sort((x, y) => d.srs[x].due - d.srs[y].due).slice(0, keys.length - 3000).forEach((x) => delete d.srs[x]); }
+  };
+  Store.srsDue = (limit) => { const d = P(); const today = dayNo(); return Object.values(d.srs || {}).filter((r) => r.g === Store.grade() && r.due <= today).sort((a, b) => a.box - b.box || a.due - b.due).slice(0, limit || 999); };
+  Store.srsCount = () => { const d = P(); const today = dayNo(); let due = 0, known = 0; for (const r of Object.values(d.srs || {})) { if (r.g !== Store.grade()) continue; if (r.due <= today) due++; if (r.box >= 3) known++; } return { due, known }; };
   Store.logMistake = (entry) => { const d = P(); d.mistakes.unshift(Object.assign({ t: Date.now(), grade: Store.grade() }, entry)); if (d.mistakes.length > 300) d.mistakes.length = 300; };
   Store.recentMistakes = (subject, limit) => P().mistakes.filter((m) => !subject || m.subject === subject).slice(0, limit || 10);
   Store.weakWords = (subject, limit) => { const counts = {}; for (const m of P().mistakes) { if (subject && m.subject !== subject) continue; const k = m.word; counts[k] = counts[k] || { word: k, n: 0, modes: {}, subject: m.subject }; counts[k].n++; counts[k].modes[m.mode] = (counts[k].modes[m.mode] || 0) + 1; } return Object.values(counts).sort((a, b) => b.n - a.n).slice(0, limit || 6); };

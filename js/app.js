@@ -34,7 +34,9 @@ window.GKA = window.GKA || {};
       else if (name === "hub") V.hub(el, parts[1], parseInt(parts[2], 10) || 1);
       else if (name === "play") {
         inPlay = true;
-        if (parts[1] === "placement") Session.start({ subject: "understand", n: 1, mode: "placement", source: "placement" }, el);
+        if (parts[1] === "resume") { if (!Session.resume(el)) { inPlay = false; return App.go("home"); } }
+        else if (parts[1] === "brain") Session.start({ subject: "reading", n: 1, mode: "brain", source: "brain" }, el);
+        else if (parts[1] === "placement") Session.start({ subject: "understand", n: 1, mode: "placement", source: "placement" }, el);
         else if (parts[1] === "words") Session.start({ subject: "reading", n: Store.currentLevel("reading"), mode: parts[2] || "read", source: "mywords" }, el);
         else if (parts[1] === "mix") Session.start({ subject: parts[2] || "reading", n: Store.currentLevel(parts[2] || "reading"), mode: parts[3] || "read", source: "mix" }, el);
         else if (parts[1] === "review") Session.start({ subject: parts[2] || "reading", n: Store.currentLevel(parts[2] || "reading"), mode: parts[3] || "speak", source: "review" }, el);
@@ -43,6 +45,8 @@ window.GKA = window.GKA || {};
       else if (name === "results") { inPlay = false; V.results(el); }
       else if (name === "words") V.words(el);
       else if (name === "library") V.library(el, parts[1]);
+      else if (name === "practice") V.practice(el);
+      else if (name === "game") V.game(el, parts[1]);
       else if (name === "me") V.me(el);
       else if (name === "parent") V.parent(el);
       else V.home(el);

@@ -88,6 +88,15 @@ window.GKA = window.GKA || {};
     if (!c.ev && kind !== "order" && !NO_EVIDENCE.includes(q.k)) c.ev = E.autoEvidence(passage.paras, q.q, kind === "tf" ? q.q : String(c.answer));
     return c;
   }
+  // One question card with its passage, for Brain Boost review.
+  E.uqCardFor = (L, text) => {
+    for (const it of L.items || []) {
+      if (it.t && it.t === text) return sentenceCard(it, false);
+      if (!it.text) continue; const q = (it.qs || []).find((x) => x.q === text); if (!q) continue;
+      const passage = E.passageOf(it); return qCard(Object.assign({}, q, { ev: q.e ? locate(passage.paras, q.e) : null }), passage, { guided: false, show: "open", stage: L.stage });
+    }
+    return null;
+  };
   function sentenceCard(it, guided) {
     const passage = { title: "", pic: guided ? it.p || null : null, paras: [[it.t]] };
     if (it.k === "pic") return { type: "uq", k: "pic", kind: "picopt", q: "Which picture matches the sentence?", answer: it.o[0], options: U.shuffle(it.o.slice()), passage: { title: "", pic: null, paras: [[it.t]] }, ev: [0, 0], show: "open", guided, stage: 2, graded: true, word: it.t };

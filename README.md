@@ -76,6 +76,25 @@ How it teaches:
 
 Each question names the words that hold its answer (`e`), and the content check below confirms every evidence phrase is really in the text.
 
+## How the app is organized
+
+Four labeled tabs at the bottom, so a child can find everything alone:
+- **Learn**: a greeting with today's goal, one big Continue card (finish an unfinished lesson, or start the next level), the four subjects and the learning path.
+- **Practice**: Brain Boost, three games (Word Pop, Math Sprint, Memory Match), Reading and Science mix, My mistakes, My Words and a thinking challenge from Nova.
+- **Library**: one search box for every subject, Keep going (levels opened recently), Saved (tap the heart on any level), then every level with Flashcards, Practice this level and Ask Nova.
+- **Me**: comfort settings, My Words, grown-ups (PIN), streak, hearts, quests, badges and the shop.
+
+**Finish later.** A lesson in progress is saved after every card. Leaving asks "Take a break?" and the Learn page then shows Continue at the exact card.
+
+**No jumps in difficulty.** `node tools/difficulty.js` measures every level (word syllables and sentence length for Reading, lesson sentences for Science, passage length and stage for Understand, answer size for Math) and lists steps over 35%. The lesson builder smooths them:
+- Every level lesson opens with two warm-up cards from the level before (no stars, not scored, no hearts lost).
+- Its own cards go from easier to harder in three bands, shuffled inside each band.
+- The first level of a new Understand stage opens with a bridge passage or items in the old style.
+- Phrases (similes, proverbs, idioms) are built from word tiles instead of typed letter by letter.
+- After two misses in a row the next card is the easiest of the next few, with a kind word.
+
+**Fun and smart.** Combos cheer at 3, 5, 8, 12, 16 and 20 right in a row. Brain Boost uses spaced repetition: each word or question answered moves up a box when it is right the first time (back in 1, 2, 4, 7, 14, then 30 days) and back to the start when missed, so review comes just before it would be forgotten. Games use only the child's grade and the levels already reached, keep a best score and give up to 10 stars.
+
 ## Voice, Nova the AI teacher, and studying comfortably
 
 **Voice.** Every word, sentence, story, lesson and teacher answer goes through one voice layer (`js/speech.js`).
@@ -129,6 +148,8 @@ The app is live at **https://waeil55.github.io/MerolaApp/** as an installable we
 - `content/<grade>/` holds that grade's 50 levels for each subject (see above). `content/pictures.js` maps words to picture emoji. `content/math-lib.js` and `content/math-more.js` hold the math problem and word problem generators. Edit these to change words, stories, lessons or questions.
 - `js/rewards.js` hearts, gems, quests, badges, chests, shop and leaderboard.
 - `js/speech.js` the voice layer (device voices, AI voices with cache and prefetch, microphone, sound effects).
+- `js/games.js` the Practice tab, Brain Boost entry and the three games.
+- `tools/difficulty.js` difficulty report for every level.
 - `js/teacher.js` Nova, the AI teacher, with built-in help when no AI is available.
 - `js/understand.js` the comprehension engine: sentence splitting, evidence finding, decks for the five stages, placement, and look-back cards for stories and lessons.
 - `js/engine.js` builds decks and applies the star and review rules. `js/session.js` plays the cards. `js/views.js` the screens.

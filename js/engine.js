@@ -107,7 +107,90 @@ window.GKA = window.GKA || {};
   const shuffleAfter = (deck, keepFirst) => { const head = deck.filter(keepFirst), rest = U.shuffle(deck.filter((c) => !keepFirst(c))); deck.length = 0; deck.push(...head, ...rest); return deck; };
 
   /* Build the deck. opts: { subject, n, mode, order, source, size } */
+  /* ----- Smooth difficulty -----
+     No jumps: a lesson starts with two warm-up cards from the previous level (no stars, not scored), then its own
+     cards go from easier to harder in three bands (shuffled inside each band), and the first level of a new
+     Understand stage opens with a bridge item in the old style. The session also eases off after two misses. */
+  const syllables = (w) => { w = String(w).toLowerCase().replace(/[^a-z]/g, ""); if (!w) return 0; if (w.length <= 3) return 1; w = w.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, "").replace(/^y/, ""); const m = w.match(/[aeiouy]{1,2}/g); return m ? m.length : 1; };
+  E.cardDifficulty = (c) => {
+    if (!c) return 0;
+    if (c.problem) { const a = parseFloat(String(c.problem.answer).replace(/[^0-9.\-]/g, "")); return Math.log10(1 + Math.abs(a || 0)) * 2 + String(c.problem.q || "").length / 30 + (c.sub === "words" ? 2 : 0); }
+    if (c.sentence && ["blank", "dictation", "sentence", "readaloud"].includes(c.type)) return sentenceWords(c.sentence).length * 0.6 + (c.type === "dictation" ? 3 : 2);
+    if (c.pairs) return 4;
+    if (c.q) return String(c.q).length / 25 + (c.options ? c.options.join(" ").length / 40 : 0) + (c.kind === "order" || c.type === "order" ? 1.5 : 0) + (c.passage ? 0.5 : 0);
+    if (c.word) { const w = String(c.word); return w.split(/\s+/).reduce((a, x) => a + syllables(x), 0) * 1.2 + w.replace(/[^a-z]/gi, "").length / 4 + ({ speak: 0.5, write: 1.5, unscramble: 1, listen: 0.7, trace: 0 }[c.type] || 0); }
+    return 3;
+  };
+  const RAMPABLE = new Set(["readcheck", "picmatch", "blank", "match", "speak", "readaloud", "listen", "unscramble", "dictation", "write", "sentence", "math", "question", "truefalse", "order", "uq", "u-sort", "u-wordpic", "u-picword"]);
+  E.ramp = (deck, mix) => {
+    if (deck.some((c) => c.type === "u-read" || c.type === "story-listen")) return deck; // questions that follow a text keep the text's order
+    const idx = []; deck.forEach((c, i) => { if (c.graded && !c.warm && RAMPABLE.has(c.type)) idx.push(i); });
+    if (idx.length < 3) return deck;
+    const cards = idx.map((i) => deck[i]).sort((a, b) => E.cardDifficulty(a) - E.cardDifficulty(b));
+    const band = Math.ceil(cards.length / 3); const out = [];
+    for (let b = 0; b < 3; b++) { const part = cards.slice(b * band, (b + 1) * band); out.push(...(mix ? U.shuffle(part) : part)); }
+    idx.forEach((pos, k) => { deck[pos] = out[k]; });
+    return deck;
+  };
+  function warmUp(opts, deck) {
+    const n = opts.n; if (!n || n <= 1 || opts.source !== "level" || ["story", "placement", "guided"].includes(opts.mode)) return [];
+    const L = E.level(opts.subject, n), P = E.level(opts.subject, n - 1); if (!L || !P) return [];
+    const isPassage = (x) => !!(x.items && x.items[0] && x.items[0].text);
+    let prev;
+    try { prev = buildCore(Object.assign({}, opts, { n: n - 1, warm: true })); } catch (e) { return []; }
+    let pick;
+    if (opts.subject === "understand") {
+      const stageStart = (P.stage || 0) < (L.stage || 0);
+      if (isPassage(P)) {
+        if (!stageStart) return []; // passage to passage inside a stage: the passages already ramp
+        // Bridge at a new stage: one short passage from the old stage with its first two questions.
+        const read = prev.findIndex((c) => c.type === "u-read"); if (read < 0) return [];
+        pick = [prev[read]].concat(prev.slice(read + 1).filter((c) => c.graded && c.type === "uq").slice(0, 2));
+      } else pick = prev.filter((c) => c.graded).sort((a, b) => E.cardDifficulty(a) - E.cardDifficulty(b)).slice(0, stageStart ? 3 : 2);
+    } else pick = prev.filter((c) => c.graded && RAMPABLE.has(c.type)).sort((a, b) => E.cardDifficulty(a) - E.cardDifficulty(b)).slice(0, 2);
+    return pick.map((c) => Object.assign({}, c, { warm: true, warmFrom: n - 1 }));
+  }
+  /* Brain Boost: what is due for review today across every subject (spaced repetition), topped up with a few fresh
+     cards from levels already reached, and two math problems. Cards go easier to harder. */
+  E.brainDeck = () => {
+    const out = []; const seen = new Set();
+    const wordCard = (subject, L, w) => {
+      const pool = poolFor(subject, L.n, L.words || []); const opts = () => U.shuffle(U.distractors(w.w, pool, 3).concat([w.w]));
+      if (w.s && hasWordIn(w) && Math.random() < 0.45) return { type: "blank", word: w.w, sentence: w.s, options: opts(), graded: true };
+      return { type: "listen", sub: "pick", word: w.w, hint: w.h || "", sentence: w.s || "", graded: true, pic: E.pictureFor(w.w), options: opts() };
+    };
+    const cardFor = (subject, L, key) => {
+      if (subject === "understand") return E.uqCardFor ? E.uqCardFor(L, key) : null;
+      const w = (L.words || []).find((x) => x.w === key); if (w) return wordCard(subject, L, w);
+      const q = (L.questions || []).find((x) => x.q === key); if (q) return quizCard(q);
+      for (const st of L.stories || []) { const sq = st.questions.find((x) => x.q === key); if (sq) return { type: "question", q: sq.q, options: U.shuffle(sq.o.slice()), answer: sq.o[sq.a || 0], graded: true, word: sq.q }; }
+      return null;
+    };
+    for (const r of Store.srsDue(14)) {
+      const L = E.level(r.s, r.n); if (!L) continue; const c = cardFor(r.s, L, r.w);
+      if (c && !seen.has(r.s + c.word)) { seen.add(r.s + c.word); out.push(Object.assign(c, { srsSubject: r.s, srsLevel: r.n })); }
+    }
+    let guard = 0;
+    while (out.length < 10 && guard++ < 60) {
+      const subject = U.pick(["reading", "science", "reading", "understand"]); const top = Math.max(1, Store.currentLevel(subject));
+      const L = E.level(subject, 1 + Math.floor(Math.random() * top)); if (!L) continue;
+      let c = null;
+      if (subject === "understand") { const its = (L.items || []).filter((i) => i.text && i.qs && i.qs.length); if (its.length) { const it = U.pick(its); c = E.uqCardFor ? E.uqCardFor(L, U.pick(it.qs).q) : null; } }
+      else if (L.words && L.words.length && !L.letters) c = wordCard(subject, L, U.pick(L.words));
+      if (c && !seen.has(subject + c.word)) { seen.add(subject + c.word); out.push(Object.assign(c, { srsSubject: subject, srsLevel: L.n })); }
+    }
+    const M = E.level("math", Math.max(1, Store.currentLevel("math"))); if (M) for (let i = 0; i < 2; i++) { try { const p = M.gen(); out.push({ type: "math", sub: "pick", problem: p, graded: true, word: p.q, srsSubject: "math" }); } catch (e) { /* skip */ } }
+    return E.ramp(U.shuffle(out), true);
+  };
   E.buildDeck = (opts) => {
+    if (opts.source === "brain") return E.brainDeck();
+    const deck = buildCore(opts);
+    if (opts.warm || !deck.length) return deck;
+    if (opts.source !== "placement") E.ramp(deck, (opts.order || Store.get().settings.order || "shuffle") !== "order");
+    if (opts.source === "level") { const w = warmUp(opts, deck); if (w.length) { const lead = deck[0] && ["u-tip", "lesson"].includes(deck[0].type) ? 1 : 0; deck.splice(lead, 0, ...w); } }
+    return deck;
+  };
+  function buildCore(opts) {
     const { subject, n, mode } = opts;
     const settings = Store.get().settings;
     const order = opts.order || settings.order || "shuffle";
@@ -145,7 +228,11 @@ window.GKA = window.GKA || {};
     } else if (mode === "write") {
       if (isLetters) { for (const w of words.slice(0, 6)) deck.push({ type: "trace", word: w.w, hint: w.h || "", graded: true }); for (const w of words.slice(6, 10)) deck.push({ type: "write", sub: "tiles", word: w.w, hint: w.h || "", sentence: w.s || "", graded: true, letter: true, tiles: tilesFor(w.w) }); }
       else {
-        for (const w of words.slice(0, 6)) { const canTile = !/\s/.test(w.w) && w.w.replace(/[^a-z]/gi, "").length <= 8; deck.push({ type: "write", sub: canTile ? "tiles" : "type", word: w.w, hint: w.h || "", sentence: w.s || "", graded: true, letter: false, tiles: canTile ? tilesFor(w.w) : null, pic: withPic(w) }); }
+        for (const w of words.slice(0, 6)) {
+          const parts = sentenceWords(w.w);
+          if (parts.length >= 2 && parts.length <= 9) { deck.push({ type: "sentence", sentence: w.w, word: w.w, tiles: U.shuffle(parts), graded: true, phrase: true }); continue; }
+          const canTile = !/\s/.test(w.w) && w.w.replace(/[^a-z]/gi, "").length <= 8; deck.push({ type: "write", sub: canTile ? "tiles" : "type", word: w.w, hint: w.h || "", sentence: w.s || "", graded: true, letter: false, tiles: canTile ? tilesFor(w.w) : null, pic: withPic(w) });
+        }
         for (const w of U.shuffle(words.filter((x) => !/\s/.test(x.w) && x.w.length >= 4 && x.w.length <= 9)).slice(0, 1)) deck.push({ type: "unscramble", word: w.w, sentence: w.s || "", tiles: tilesFor(w.w, true), pic: withPic(w), graded: true });
         if (g >= 1) for (const w of U.shuffle(withSentence.filter((x) => { const c = sentenceWords(x.s).length; return c >= 3 && c <= 8; })).slice(0, 2)) deck.push({ type: "sentence", sentence: w.s, word: w.w, tiles: U.shuffle(sentenceWords(w.s)), graded: true });
       }
@@ -168,7 +255,7 @@ window.GKA = window.GKA || {};
     // Cards come in a new order every run; word cards that teach (flash) still come before the checks.
     if (mix && ["read", "speak", "listen", "write"].includes(mode)) shuffleAfter(deck, (c) => c.type === "flash" || c.type === "trace");
     return deck;
-  };
+  }
   function quizCard(q) {
     if (q.t === "mc") return { type: "question", q: q.q, options: U.shuffle(q.o), answer: q.o[q.a || 0], graded: true, word: q.q };
     if (q.t === "tf") return { type: "truefalse", q: q.q, answer: q.a, graded: true, word: q.q };

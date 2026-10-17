@@ -31,7 +31,12 @@ window.GKA = window.GKA || {};
     return fmt(t.levels) + " skills · new problems every time · word problems in every level";
   };
 
-  const tabs = (subject) => '<div class="subject-tabs" style="margin-top:14px"><a href="#library-all" class="' + (subject === "all" ? "on purple" : "") + '" aria-label="Search everything">' + UI.icon("search") + '<span class="tl">All</span></a>' + SUBJECTS.map((id) => '<a href="#library-' + id + '" class="' + (id === subject ? "on " + UI.toneOf(id) : "") + '" aria-label="' + E.subject(id).name + '">' + UI.subjectIcon(id) + '<span class="tl">' + E.subject(id).name + "</span></a>").join("") + "</div>";
+  const savedKey = () => "gka.saved." + ((Store.profile() || {}).id || "guest") + "." + Store.grade();
+  const getSaved = () => { try { return JSON.parse(localStorage.getItem(savedKey()) || "[]"); } catch (e) { return []; } };
+  const isSaved = (subject, n) => getSaved().some((x) => x.subject === subject && x.n === n);
+  const toggleSaved = (subject, n) => { let list = getSaved(); if (isSaved(subject, n)) list = list.filter((x) => !(x.subject === subject && x.n === n)); else { const L0 = E.level(subject, n); list.unshift({ subject, n, name: L0 ? L0.name : "" }); } try { localStorage.setItem(savedKey(), JSON.stringify(list.slice(0, 40))); } catch (e) { /* ignore */ } return isSaved(subject, n); };
+  const jumpChips = (list, icon, title) => list.length ? '<div class="lib-row"><div class="lib-row-t">' + UI.icon(icon) + " " + title + '</div><div class="chip-scroll">' + list.map((r) => '<a class="jump ' + UI.toneOf(r.subject) + '" href="#library-' + r.subject + '" data-jump="' + r.n + '" data-subj="' + r.subject + '">' + UI.subjectIcon(r.subject) + "<span><b>Level " + r.n + "</b> " + esc(r.name) + "</span></a>").join("") + "</div></div>" : "";
+  const tabs = (subject) => '<div class="subject-tabs" style="margin-top:14px">' + SUBJECTS.map((id) => '<a href="#library-' + id + '" class="' + (id === subject ? "on " + UI.toneOf(id) : "") + '" aria-label="' + E.subject(id).name + '">' + UI.subjectIcon(id) + '<span class="tl">' + E.subject(id).name + "</span></a>").join("") + "</div>";
   const hitsHTML = (hits, limit, showSubject) => '<div class="small muted" style="margin:10px 2px">' + (hits.length ? hits.length + (hits.length > limit ? "+" : "") + " found" : "Nothing found") + "</div>" + hits.slice(0, limit).map((h) => '<div class="lib-word">' + (h.say ? hear(h.say) : "") + '<div class="grow"><b>' + esc(h.label) + '</b><div class="small muted">' + (showSubject ? esc(E.subject(h.subject).name) + " · " : "") + "Level " + h.n + (h.sub ? " · " + esc(h.sub) : "") + '</div></div><button class="lib-ans" data-open="' + h.n + '" data-subj="' + h.subject + '">Open</button></div>').join("");
   // All tab: one search box across every subject in the grade.
   function libraryAll(root) {
@@ -45,7 +50,7 @@ window.GKA = window.GKA || {};
       const q = box.value.trim().toLowerCase(); if (q.length < 2) { out.innerHTML = ""; return; }
       out.innerHTML = hitsHTML(searchHits(SUBJECTS, q, 80), 80, true);
       out.querySelectorAll("[data-say]").forEach((b) => { b.onclick = () => Speech.speak(b.dataset.say, { rate: Store.get().settings.rate }); });
-      out.querySelectorAll("[data-open]").forEach((b) => { b.onclick = () => { try { sessionStorage.setItem("gka.libopen", b.dataset.open); } catch (e) { /* ignore */ } window.GKA.App.go("library-" + b.dataset.subj); }; });
+      out.querySelectorAll("[data-open]").forEach((b) => { if (b.dataset.subj && b.dataset.subj !== subject) { b.onclick = () => { try { sessionStorage.setItem("gka.libopen", b.dataset.open); } catch (e) { /* ignore */ } window.GKA.App.go("library-" + b.dataset.subj); }; return; } b.onclick = () => { try { sessionStorage.setItem("gka.libopen", b.dataset.open); } catch (e) { /* ignore */ } window.GKA.App.go("library-" + b.dataset.subj); }; });
     };
     box.oninput = run; run(); if (!pre) setTimeout(() => box.focus(), 50);
   }
@@ -130,10 +135,11 @@ window.GKA = window.GKA || {};
     const levels = E.levels(subject); const tone = UI.toneOf(subject); const t = totals(subject, levels);
     root.innerHTML = '<div class="screen">' + V._topbar() +
       '<h1 style="font-size:28px;margin-top:18px">Library</h1><div class="small muted">Everything ' + esc(Store.get().kid.name) + " can study in " + esc(Store.gradeName(Store.grade())) + ". Tap a level to open it, tap the ear to hear it.</div>" +
+      '<label class="findbox">' + UI.icon("search") + '<input id="libsearch" type="search" placeholder="Search every word, story, lesson and passage" autocomplete="off" enterkeyhint="search"></label>' +
+      '<div id="libresults"></div>' + jumpChips(V._recent ? V._recent().slice(0, 6) : [], "clock", "Keep going") + jumpChips(getSaved(), "heart", "Saved") +
       tabs(subject) +
       '<div class="card flat lib-total ' + tone + '"><div style="font-weight:900">' + E.subject(subject).name + " · " + t.levels + ' levels</div><div class="small">' + totalsLine(subject, t) + "</div></div>" +
-      (subject !== "math" ? '<input class="input" id="libsearch" type="search" placeholder="Search words, stories and lessons" autocomplete="off" style="margin-top:12px">' : "") +
-      '<div id="libresults"></div><div class="lib-levels">' + levels.map((L) => '<details class="lib-level" data-n="' + L.n + '"><summary><span class="lib-n ' + tone + '">' + L.n + '</span><span class="grow"><b>' + esc(L.name) + '</b><span class="small muted">' + esc(countLabel(subject, L)) + "</span></span>" + UI.icon("chev") + '</summary><div class="lib-body"></div></details>').join("") + "</div></div>" + V._bottomNav("library");
+      '<div class="lib-levels">' + levels.map((L) => '<details class="lib-level" data-n="' + L.n + '"><summary><span class="lib-n ' + tone + '">' + L.n + '</span><span class="grow"><b>' + esc(L.name) + '</b><span class="small muted">' + esc(countLabel(subject, L)) + "</span></span>" + '<button class="lib-save' + (isSaved(subject, L.n) ? " on" : "") + '" data-save="' + L.n + '" aria-label="Save level ' + L.n + '" aria-pressed="' + isSaved(subject, L.n) + '">' + UI.icon("heart") + "</button>" + UI.icon("chev") + '</summary><div class="lib-body"></div></details>').join("") + "</div></div>" + V._bottomNav("library");
     V._bindGrade(root);
     const rate = Store.get().settings.rate;
     const bindBody = (el) => {
@@ -146,15 +152,18 @@ window.GKA = window.GKA || {};
     root.querySelectorAll(".lib-level").forEach((d) => { d.addEventListener("toggle", () => {
       const body = d.querySelector(".lib-body"); const L = E.level(subject, +d.dataset.n);
       if (d.open && window.GKA.Teacher) window.GKA.Teacher.setFocus({ subject, n: L.n });
+      if (d.open && V._addRecent) V._addRecent(subject, L.n);
       if (d.open && !body.dataset.ready) { body.innerHTML = levelTools(subject, L) + levelBody(subject, L); body.dataset.ready = "1"; bindBody(body); }
     }); });
+    root.querySelectorAll("[data-save]").forEach((b) => { b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); const on = toggleSaved(subject, +b.dataset.save); b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); Speech.sfx(on ? "ok" : "tap"); UI.toast(on ? "Saved. Find it at the top of the Library." : "Removed from Saved", "ok"); }; });
+    root.querySelectorAll("[data-jump]").forEach((a) => { a.onclick = (e) => { e.preventDefault(); try { sessionStorage.setItem("gka.libopen", a.dataset.jump); } catch (x) { /* ignore */ } if (a.dataset.subj === subject) V.library(root, subject); else window.GKA.App.go("library-" + a.dataset.subj); }; });
     let toOpen = null; try { toOpen = sessionStorage.getItem("gka.libopen"); sessionStorage.removeItem("gka.libopen"); } catch (e) { /* ignore */ }
     if (toOpen) { const d = root.querySelector('.lib-level[data-n="' + toOpen + '"]'); if (d) { d.open = true; setTimeout(() => d.scrollIntoView({ block: "start" }), 60); } }
     const search = root.querySelector("#libsearch"); const out = root.querySelector("#libresults");
     if (search) search.oninput = () => {
       const q = search.value.trim().toLowerCase(); if (q.length < 2) { out.innerHTML = ""; return; }
-      const hits = searchHits([subject], q, 60);
-      out.innerHTML = hitsHTML(hits, 60, false);
+      const hits = searchHits(SUBJECTS, q, 60);
+      out.innerHTML = hitsHTML(hits, 60, true);
       bindBody(out);
       out.querySelectorAll("[data-open]").forEach((b) => { b.onclick = () => { const d = root.querySelector('.lib-level[data-n="' + b.dataset.open + '"]'); if (d) { d.open = true; d.scrollIntoView({ block: "start", behavior: "smooth" }); } }; });
     };

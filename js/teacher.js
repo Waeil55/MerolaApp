@@ -240,7 +240,8 @@ window.GKA = window.GKA || {};
     el.classList.add("on"); document.body.classList.add("nova-open");
     if (!msgs.length) msgs.push({ role: "assistant", content: greetFor() });
     draw();
-    if (opts.ask === "why") send("Why is that the right answer? Can you explain it to me?");
+    if (opts.prompt) send(opts.prompt);
+    else if (opts.ask === "why") send("Why is that the right answer? Can you explain it to me?");
     else if (opts.ask === "hint") send("Can I have a hint, please?");
     else setTimeout(() => { const i = el.querySelector("#np-text"); if (i && window.matchMedia("(pointer: fine)").matches) i.focus(); }, 60);
   };
@@ -252,7 +253,7 @@ window.GKA = window.GKA || {};
     T.close(); msgs = []; if (name !== "library") T.focus = null;
     let fab = document.getElementById("nova-fab");
     if (!fab) { fab = document.createElement("button"); fab.id = "nova-fab"; fab.className = "nova-fab"; fab.setAttribute("aria-label", "Ask Nova, your teacher"); fab.innerHTML = '<span class="nf-face">' + UI.mascot("nova") + '</span><span class="nf-l">Ask</span>'; fab.onclick = () => T.open(); document.body.appendChild(fab); }
-    fab.hidden = !Store.hasProfile() || ["profiles", "addkid", "editkid", "parent"].includes(name);
+    fab.hidden = !Store.hasProfile() || ["profiles", "addkid", "editkid", "parent", "game"].includes(name);
     document.body.dataset.route = name;
   };
   window.GKA.Teacher = T;
