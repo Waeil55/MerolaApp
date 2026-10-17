@@ -27,7 +27,7 @@ for (const p of window.GKA.contentParts) {
   if (!p.extra) continue; const levels = table[p.grade + ":" + p.subject]; if (!levels) { err("extra for unknown grade or subject " + p.grade + "/" + p.subject); continue; }
   for (const n in p.levels) {
     const L = levels.find((x) => x.n === +n); const ex = p.levels[n]; if (!L) { err(p.grade + " " + p.subject + " extra for missing level " + n); continue; } extraLevels++;
-    if (ex.words) L.words = (L.words || []).concat(ex.words);
+    if (ex.words) { const key = (w) => String(Array.isArray(w) ? w[0] : w.w).toLowerCase(); const have = new Set((L.words || []).map(key)); L.words = (L.words || []).concat(ex.words.filter((w) => !have.has(key(w)) && have.add(key(w)))); }
     if (ex.stories) L.stories = L.stories.concat(ex.stories);
     if (ex.questions) L.questions = (L.questions || []).concat(ex.questions);
     if (ex.lesson2) L.lesson = (L.lesson || "") + " " + ex.lesson2;

@@ -26,7 +26,8 @@ window.GKA = window.GKA || {};
       const levels = (registry[part.subject] || {})[part.grade]; if (!levels) continue;
       for (const n in part.levels) {
         const L = levels.find((x) => x.n === +n); const ex = part.levels[n]; if (!L) continue;
-        if (ex.words) L.words = L.words.concat(ex.words.map(normWord));
+        const addWords = (list) => { const have = new Set(L.words.map((w) => String(w.w).toLowerCase())); for (const w of list.map(normWord)) { const k = String(w.w).toLowerCase(); if (!have.has(k)) { have.add(k); L.words.push(w); } } };
+        if (ex.words) addWords(ex.words);
         if (ex.story2) L.stories = L.stories.concat([ex.story2]);
         if (ex.stories) L.stories = L.stories.concat(ex.stories);
         if (ex.items) L.items = (L.items || []).concat(ex.items);
@@ -34,7 +35,7 @@ window.GKA = window.GKA || {};
         if (ex.sort) L.sort = (L.sort || []).concat(ex.sort);
         if (ex.questions) L.questions = (L.questions || []).concat(ex.questions);
         if (ex.lesson2) L.lesson = (L.lesson || "") + " " + ex.lesson2;
-        if (ex.words2) L.words = L.words.concat(ex.words2.map(normWord));
+        if (ex.words2) addWords(ex.words2);
       }
     }
   }
