@@ -6,7 +6,10 @@ window.GKA = window.GKA || {};
   const OLD_KEY = "gka.progress.v1";
   const U = window.GKA.U;
   const GRADES = ["kg", "g1", "g2", "g3", "g4", "g5", "g6"];
-  const defaultSettings = () => ({ passMark: 90, speed: "level", order: "order", matching: "normal", voiceURI: "", rate: 0.9, pin: "1234", goalMin: 10, goalCards: 25, sound: true, theme: "auto", hearts: true, deckSize: 20 });
+  const defaultSettings = () => ({ passMark: 90, speed: "level", order: "shuffle", matching: "normal", voiceURI: "", rate: 0.9, pin: "1234", goalMin: 10, goalCards: 25, sound: true, theme: "auto", hearts: true, deckSize: 20,
+    voiceEngine: "device", aiVoice: "nova", elevenVoice: "21m00Tcm4TlvDq8ikWAM", aiProvider: "auto", aiModel: "claude-haiku-5-5", openaiModel: "gpt-4o-mini", teacherVoice: true, textSize: "normal", font: "normal", calm: false, autoRead: true, v3: true });
+  // Settings saved before shuffling became the default keep their choices, except the old default order, which becomes shuffle.
+  const upgrade = (st) => { if (!st.v3) { if (st.order === "order") st.order = "shuffle"; st.v3 = true; } return st; };
   const emptyRewards = () => ({ gems: 0, hearts: { count: 5, last: 0 }, starsByDay: {}, quests: null, badges: {}, chests: {}, freeze: 0, counts: {} });
   const emptyProfileData = () => ({ stars: 0, streak: { last: "", count: 0 }, minutes: {}, cardsByDay: {}, subjects: {}, mastery: {}, mistakes: [], myWords: [], rewards: emptyRewards() });
   const DEFAULTS = () => ({ v: 2, profiles: [], current: null, data: {}, settings: defaultSettings() });
@@ -23,7 +26,7 @@ window.GKA = window.GKA || {};
       if (raw) {
         const p = JSON.parse(raw);
         state = Object.assign(DEFAULTS(), p);
-        state.settings = Object.assign(defaultSettings(), p.settings || {});
+        state.settings = Object.assign(defaultSettings(), upgrade(Object.assign({}, p.settings || {})));
       } else {
         const old = localStorage.getItem(OLD_KEY);
         if (old) migrate(JSON.parse(old));

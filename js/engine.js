@@ -69,6 +69,8 @@ window.GKA = window.GKA || {};
     let words;
     if (source === "mywords") words = Store.myWords().map((x) => ({ w: x.w, s: x.s, h: "" }));
     else if (source === "review") words = Store.weakWords(subject, 12).map((x) => ({ w: x.word, s: "", h: "" }));
+    // Mix practice: words from every level the child has reached, shuffled, so each run is a new set.
+    else if (source === "mix") { const top = Math.max(1, Store.currentLevel(subject)); const all = []; for (let k = 1; k <= top; k++) { const l = E.level(subject, k); if (l && l.words && !l.letters) all.push(...l.words); } words = U.shuffle(all).slice(0, 12); }
     else {
       const L = E.level(subject, n);
       words = (L && L.words || []).slice();
@@ -85,11 +87,31 @@ window.GKA = window.GKA || {};
   const rotate = (arr, k, plays) => { if (arr.length <= k) return arr.slice(); const start = ((plays || 0) * k) % arr.length; const out = []; for (let i = 0; i < k; i++) out.push(arr[(start + i) % arr.length]); return out; };
   const take = (words, k, order, plays) => { if (words.length <= k) return words.slice(); if (order === "random") return U.shuffle(words).slice(0, k); const start = ((plays || 0) * k) % words.length; const out = []; for (let i = 0; i < k; i++) out.push(words[(start + i) % words.length]); return out; };
 
+  /* Shuffle bag: every level keeps the items it has not shown yet. Each run draws from the bag and it refills, freshly
+     shuffled, only when empty, so a child sees everything in a level, in a new order, before anything repeats. */
+  const BAGS = "gka.bags.v1"; let bags = null;
+  const loadBags = () => { if (bags) return bags; try { bags = JSON.parse(localStorage.getItem(BAGS) || "{}") || {}; } catch (e) { bags = {}; } return bags; };
+  const saveBags = () => { try { const txt = JSON.stringify(bags); if (txt.length > 300000) { bags = {}; localStorage.removeItem(BAGS); } else localStorage.setItem(BAGS, txt); } catch (e) { /* storage blocked: still random */ } };
+  E.shuffleOn = () => (Store.get().settings.order || "shuffle") !== "order";
+  E.drawIdx = (key, len, k) => {
+    if (len <= 0) return [];
+    const b = loadBags(); const p = Store.profile(); const id = (p ? p.id : "guest") + ":" + Store.grade() + ":" + key;
+    let bag = (b[id] || []).filter((i) => i < len); const out = [];
+    while (out.length < Math.min(k, len)) {
+      if (!bag.length) { bag = U.shuffle([...Array(len).keys()].filter((i) => !out.includes(i))); if (!bag.length) break; }
+      out.push(bag.pop());
+    }
+    b[id] = bag; saveBags(); return out;
+  };
+  E.draw = (key, arr, k) => E.drawIdx(key, arr.length, k).map((i) => arr[i]);
+  const shuffleAfter = (deck, keepFirst) => { const head = deck.filter(keepFirst), rest = U.shuffle(deck.filter((c) => !keepFirst(c))); deck.length = 0; deck.push(...head, ...rest); return deck; };
+
   /* Build the deck. opts: { subject, n, mode, order, source, size } */
   E.buildDeck = (opts) => {
     const { subject, n, mode } = opts;
     const settings = Store.get().settings;
-    const order = opts.order || settings.order || "order";
+    const order = opts.order || settings.order || "shuffle";
+    const mix = order !== "order";
     const source = opts.source || "level";
     const L = E.level(subject, n);
     const g = gradeIndex();
@@ -98,7 +120,7 @@ window.GKA = window.GKA || {};
     if (subject === "math") return buildMath(L, mode, opts.size || settings.deckSize || 20);
     const all = E.wordsFor(subject, n, order, source);
     const plays = source === "level" ? (Store.levelPeek(subject, n) || { plays: 0 }).plays : 0;
-    const words = take(all, 10, order, plays);
+    const words = order === "story" ? all.slice(0, 10) : !mix ? take(all, 10, order, plays) : source === "level" ? E.draw(subject + ":" + n + ":words", all, 10) : U.shuffle(all).slice(0, 10);
     const pool = poolFor(subject, n, all);
     const isLetters = !!(L && L.letters) && source === "level";
     const letterPool = "abcdefghijklmnopqrstuvwxyz".split("");
@@ -128,19 +150,23 @@ window.GKA = window.GKA || {};
         if (g >= 1) for (const w of U.shuffle(withSentence.filter((x) => { const c = sentenceWords(x.s).length; return c >= 3 && c <= 8; })).slice(0, 2)) deck.push({ type: "sentence", sentence: w.s, word: w.w, tiles: U.shuffle(sentenceWords(w.s)), graded: true });
       }
     } else if (mode === "story" && L && L.stories && L.stories.length) {
-      const pick = Number.isInteger(opts.story) ? opts.story : plays; const story = L.stories[((pick % L.stories.length) + L.stories.length) % L.stories.length];
+      const pick = Number.isInteger(opts.story) ? opts.story : mix ? E.drawIdx(subject + ":" + n + ":story", L.stories.length, 1)[0] : plays; const story = L.stories[((pick % L.stories.length) + L.stories.length) % L.stories.length];
       deck.push({ type: "story-listen", story, graded: false });
       deck.push({ type: "story-words", story, graded: false });
       if (E.storyQuestionCards) deck.push(...E.storyQuestionCards(story, true));
       else for (const q of story.questions) deck.push({ type: "question", q: q.q, options: U.shuffle(q.o), answer: q.o[q.a], graded: true, word: q.q });
     } else if (mode === "learn" && L && L.lesson) {
       deck.push({ type: "lesson", lesson: L.lesson, words: L.words.map((w) => w.w), name: L.name, graded: false });
-      if (E.lessonQuestionCards) deck.push(...E.lessonQuestionCards(L.lesson, L.name, rotate(L.questions || [], 6, plays), true, quizCard));
-      else for (const q of rotate(L.questions || [], 6, plays)) deck.push(quizCard(q));
+      const qs = mix ? E.draw(subject + ":" + n + ":learn", L.questions || [], 6) : rotate(L.questions || [], 6, plays);
+      if (E.lessonQuestionCards) deck.push(...E.lessonQuestionCards(L.lesson, L.name, qs, true, quizCard));
+      else for (const q of qs) deck.push(quizCard(q));
     } else if (mode === "quiz" && L && L.questions) {
-      if (E.lessonQuestionCards && L.lesson) deck.push(...E.lessonQuestionCards(L.lesson, L.name, U.shuffle(L.questions).slice(0, 10), false, quizCard));
-      else for (const q of U.shuffle(L.questions).slice(0, 10)) deck.push(quizCard(q));
+      const qs = E.draw(subject + ":" + n + ":quiz", L.questions, 10);
+      if (E.lessonQuestionCards && L.lesson) deck.push(...E.lessonQuestionCards(L.lesson, L.name, qs, false, quizCard));
+      else for (const q of qs) deck.push(quizCard(q));
     }
+    // Cards come in a new order every run; word cards that teach (flash) still come before the checks.
+    if (mix && ["read", "speak", "listen", "write"].includes(mode)) shuffleAfter(deck, (c) => c.type === "flash" || c.type === "trace");
     return deck;
   };
   function quizCard(q) {

@@ -20,12 +20,16 @@ window.GKA = window.GKA || {};
     if (!deck.length) { root.innerHTML = '<div class="screen"><div class="empty">' + UI.icon("words") + '<div>Nothing to practice here yet.</div><a class="btn primary" href="#' + (opts.source === "mywords" ? "words" : "hub-" + opts.subject + "-" + opts.n) + '">Back</a></div></div>'; return; }
     renderFrame(); renderCard();
   };
+  // What is on screen right now, for the AI teacher.
+  S.current = () => { if (!st) return null; const c = st.deck[st.idx]; const L = E.level(st.subject, st.n); return { subject: st.subject, n: st.n, mode: st.mode, source: st.source, idx: st.idx, total: st.deck.length, card: c || null, cur: st.cur, levelName: L ? L.name : "", skill: L ? L.skill : "" }; };
+  // Text a card will say, so an AI voice can fetch it before the card appears.
+  const cardTexts = (c) => { if (!c) return []; const p = c.problem || {}; return [c.word, c.sentence, c.q, p.say, c.passage && c.passage.title].filter((x) => typeof x === "string" && x.length < 400); };
   S.abort = () => { clearTimers(); Speech.stop(); Speech.cancelListen(); if (st) Store.addSeconds(Math.round((Date.now() - st.t0) / 1000)); st = null; };
   S.next = () => { if (!st) return; const c = st.deck[st.idx]; if (st.source === "placement" && c && c.graded && st.cur && st.cur.first === false) return finishPlacement(); st.idx++; renderCard(); };
 
   const speedSeconds = () => { const sp = settings().speed; if (sp === "level" || sp == null) { const L = E.level(st.subject, st.n); return L ? L.speed : 1; } return Number(sp) || 0; };
   const modeLabel = () => E.modeLabel(st.mode);
-  const levelLabel = () => st.source === "placement" ? "Level check" : st.source === "mywords" ? "My Words" : st.source === "review" ? "Review" : "Level " + st.n;
+  const levelLabel = () => st.source === "placement" ? "Level check" : st.source === "mywords" ? "My Words" : st.source === "review" ? "Review" : st.source === "mix" ? "Mix practice" : "Level " + st.n;
   const $ = (sel) => st.root.querySelector(sel);
 
   function renderFrame() {
@@ -42,7 +46,7 @@ window.GKA = window.GKA || {};
   function confirmExit() {
     const m = UI.modal('<h2>Stop the lesson?</h2><p class="muted">Your stars so far are safe. This run will not count for the level.</p><div class="row"><button class="btn grow" id="m-no">Keep going</button><button class="btn red grow" id="m-yes">Stop</button></div>');
     m.el.querySelector("#m-no").onclick = m.close;
-    m.el.querySelector("#m-yes").onclick = () => { m.close(); const back = st.source === "placement" ? "home-understand" : st.source === "mywords" ? "words" : "hub-" + st.subject + "-" + st.n; S.abort(); window.GKA.App.go(back); };
+    m.el.querySelector("#m-yes").onclick = () => { m.close(); const back = st.source === "placement" ? "home-understand" : st.source === "mywords" ? "words" : st.source === "mix" || st.source === "review" ? "home-" + st.subject : "hub-" + st.subject + "-" + st.n; S.abort(); window.GKA.App.go(back); };
   }
   const HEADINGS = { flash: "Read this word out loud", readcheck: "Which one did you just see?", speak: "Say this word", write: "Look at the word", "story-listen": "Listen to the story", "story-words": "Read it word by word", question: "Answer the question", truefalse: "True or false?", order: "Put it in order", lesson: "Listen and read along", picmatch: "Which word is this picture?", blank: "Fill in the blank", match: "Match the pairs", unscramble: "Unscramble the letters", dictation: "Listen and type the sentence", sentence: "Build the sentence", trace: "Trace the letter", readaloud: "Read the sentence out loud" };
   function heading(text) { const h = $("#heading"); if (h) h.textContent = text; }
@@ -68,11 +72,13 @@ window.GKA = window.GKA || {};
     if (st.idx >= st.deck.length) return finish();
     const c = st.deck[st.idx];
     st.cur = { tries: 0, first: null, done: false, review: c.graded ? E.isReviewCard(st.subject, st.n, st.mode, c.word) : false };
-    if (st.source === "mywords" || st.source === "review") st.cur.review = c.graded ? Store.isMastered(Store.masteryKey(st.subject, st.mode, c.word)) : false;
+    if (st.source === "mywords" || st.source === "review" || st.source === "mix") st.cur.review = c.graded ? Store.isMastered(Store.masteryKey(st.subject, st.mode, c.word)) : false;
     if (st.source === "placement") st.cur.review = true;
     st.reading = false;
     resetBar(); setHead(); below("");
     window.scrollTo(0, 0);
+    try { Speech.prefetch(cardTexts(st.deck[st.idx + 1]).concat(cardTexts(st.deck[st.idx + 2]))); } catch (e) { /* prefetch is optional */ }
+    if (window.GKA.Teacher) window.GKA.Teacher.onCard();
     const r = RENDER[c.type];
     if (r) r(c); else { stage('<div class="label">Unknown card</div>'); actions(nextBtn()); bindNext(); }
   }
@@ -80,7 +86,7 @@ window.GKA = window.GKA || {};
   function answer(ok, info) {
     const c = st.deck[st.idx];
     const first = st.cur.tries === 0;
-    st.cur.tries++;
+    st.cur.tries++; st.cur.last = info && info.heard != null ? String(info.heard) : st.cur.last;
     if (first) {
       st.cur.first = ok;
       const key = Store.masteryKey(st.subject, st.mode, c.word);
@@ -101,7 +107,9 @@ window.GKA = window.GKA || {};
     let m = bar.querySelector(".sheet-msg");
     if (!m) { m = document.createElement("div"); m.className = "sheet-msg"; bar.insertBefore(m, bar.firstChild); }
     const ic = kind === "ok" ? UI.icon("check") : kind === "close" ? UI.icon("sparkle") : UI.icon("close");
-    m.innerHTML = '<div class="ico">' + ic + '</div><div><div class="t">' + U.esc(title) + "</div>" + (sub ? '<div class="s">' + U.esc(sub) + "</div>" : "") + "</div>";
+    const why = kind !== "ok" && window.GKA.Teacher ? '<button class="nova-why" id="novawhy">' + UI.icon("chat") + (st.cur && st.cur.done ? " Why? Ask Nova" : " Get a hint from Nova") + "</button>" : "";
+    m.innerHTML = '<div class="ico">' + ic + '</div><div class="grow"><div class="t">' + U.esc(title) + "</div>" + (sub ? '<div class="s">' + U.esc(sub) + "</div>" : "") + why + "</div>";
+    const wb = m.querySelector("#novawhy"); if (wb) wb.onclick = () => window.GKA.Teacher.open({ ask: st.cur && st.cur.done ? "why" : "hint" });
     const n = $("#next"); if (n) n.disabled = false;
   }
   function outOfHearts() {

@@ -76,6 +76,22 @@ How it teaches:
 
 Each question names the words that hold its answer (`e`), and the content check below confirms every evidence phrase is really in the text.
 
+## Voice, Nova the AI teacher, and studying comfortably
+
+**Voice.** Every word, sentence, story, lesson and teacher answer goes through one voice layer (`js/speech.js`).
+- Free and instant: the app ranks the voices on the device and picks the most natural one (neural, online, enhanced, Siri and Google voices first). Microsoft Edge and Safari have very human voices; Parents can choose another one.
+- AI voice: on the Parents page, choose OpenAI or ElevenLabs and paste your own key. Clips are cached on the device (they replay instantly and work offline once heard), the next card's words are fetched ahead of time, and long texts start after the first sentence while the rest loads. If the key or the internet fails, the device voice takes over at once.
+
+**Nova, the AI teacher** (`js/teacher.js`). The Ask button on every screen opens a chat that knows what the child sees: the card, its question and choices, the passage, story or lesson, the level, or the Library level that is open. While a question is unsolved Nova gives hints and guiding questions, never the answer; after it is solved Nova explains why. A wrong answer shows "Get a hint from Nova"; a solved one shows "Why? Ask Nova". Quick buttons change with the screen (hint, explain a word, read it to me, quiz me, teach me this level, homework help). Answers are read aloud with the app voice, and the child can speak the question (where the browser has a microphone).
+- In the Claude app (the artifact), Nova uses Claude through the page's sample capability with no key; the first question asks the viewer to allow it.
+- On the web version, a parent adds an Anthropic (Claude) or OpenAI key on the Parents page. The default is Claude Haiku 5.5 for speed; Sonnet 5.5 can be chosen.
+- With no AI, Nova still reads things aloud, gives hints, points to the sentence that holds the answer and explains a solved answer from the text.
+Keys are typed by the parent, stored only on that device in their own slot (`gka.keys.v1`), never included in backups, and sent only to that company. Set a spending limit in the provider account.
+
+**Shuffle.** Each level keeps a shuffle bag of the words, stories, Science questions, Understand sentences, picture words and passage groups it has not shown yet. Every run draws from the bag and it refills, reshuffled, only when empty, so a child sees everything in a level in a new order before anything repeats; checks are shuffled too. "Same order" in the comfort panel or the level page turns this off.
+
+**Study comfortably.** The Aa button in the top bar opens the comfort panel, with no PIN: text size (normal, large, extra large), easy-read letters (Lexend), voice speed, shuffle or same order, Nova reading answers aloud, and calm mode (no moving effects). Home has a Find box that searches every subject, Mix practice (a new shuffle of every level reached), My mistakes, the Library and Ask Nova. The Library has an All tab for searching everything, and every level has Flashcards (flip, hear, shuffle, swipe), Practice this level (when it is open) and Ask Nova.
+
 ## Content and the content check
 
 Each grade has a folder, `content/kg` to `content/g6`, holding that grade's files: `reading-01.js` and up, `math.js`, `science-01.js` and up, and `understand-01.js` and up. Each file adds levels to one subject of one grade, and the app joins them by level number. Files named `reading-x1.js`, `science-x2.js`, `understand-x1.js` and so on are extra parts (`extra: true`): they add more words, stories, questions, a second lesson part (`lesson2`), passages, sentences or picture words to levels that already exist. A word or Science question that is already in the level is not added twice.
@@ -112,6 +128,8 @@ The app is live at **https://waeil55.github.io/MerolaApp/** as an installable we
 - `index.html` the app shell. `styles.css` the design (light and dark).
 - `content/<grade>/` holds that grade's 50 levels for each subject (see above). `content/pictures.js` maps words to picture emoji. `content/math-lib.js` and `content/math-more.js` hold the math problem and word problem generators. Edit these to change words, stories, lessons or questions.
 - `js/rewards.js` hearts, gems, quests, badges, chests, shop and leaderboard.
+- `js/speech.js` the voice layer (device voices, AI voices with cache and prefetch, microphone, sound effects).
+- `js/teacher.js` Nova, the AI teacher, with built-in help when no AI is available.
 - `js/understand.js` the comprehension engine: sentence splitting, evidence finding, decks for the five stages, placement, and look-back cards for stories and lessons.
 - `js/engine.js` builds decks and applies the star and review rules. `js/session.js` plays the cards. `js/views.js` the screens.
 - `js/speech.js` text to speech, speech recognition and sound effects. `js/util.js` forgiving speech matching.

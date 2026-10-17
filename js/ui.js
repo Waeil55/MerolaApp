@@ -53,7 +53,15 @@ window.GKA = window.GKA || {};
     snow: stroke('<path d="M12 2v20M2 12h20M5 5l14 14M19 5L5 19"/>'),
     bolt: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="currentColor"/></svg>',
     medal: stroke('<circle cx="12" cy="14" r="6"/><path d="M8 3l2 6M16 3l-2 6M9 3h6"/>'),
-    sun: stroke('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/>')
+    sun: stroke('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/>'),
+    chat: stroke('<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>'),
+    send: stroke('<path d="M4 12l16-8-6 16-2-7z"/>'),
+    search: stroke('<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>'),
+    shuffle: stroke('<path d="M3 7h3.5c4 0 6 10 10 10H21M3 17h3.5c1.6 0 2.8-1.6 3.9-3.5M13.6 10c1.1-1.7 2.2-3 3.9-3H21M18 4l3 3-3 3M18 14l3 3-3 3"/>'),
+    volume: stroke('<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>'),
+    mute: stroke('<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/>'),
+    type: stroke('<path d="M4 19l5-14 5 14M6 14h6M15 19l3-8 3 8M16 16h4"/>'),
+    cards: stroke('<rect x="3" y="6" width="13" height="15" rx="2"/><path d="M8 3h11a2 2 0 0 1 2 2v13"/>')
   };
   UI.icon = (name) => UI.icons[name] || "";
 
@@ -78,6 +86,7 @@ window.GKA = window.GKA || {};
   };
 
   UI.confetti = (count) => {
+    if (document.documentElement.dataset.calm) return; // calm mode: no flying confetti
     if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     let c = document.getElementById("confetti");
     if (!c) { c = document.createElement("canvas"); c.id = "confetti"; document.body.appendChild(c); }

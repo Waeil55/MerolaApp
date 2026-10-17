@@ -31,6 +31,25 @@ window.GKA = window.GKA || {};
     return fmt(t.levels) + " skills · new problems every time · word problems in every level";
   };
 
+  const tabs = (subject) => '<div class="subject-tabs" style="margin-top:14px"><a href="#library-all" class="' + (subject === "all" ? "on purple" : "") + '" aria-label="Search everything">' + UI.icon("search") + '<span class="tl">All</span></a>' + SUBJECTS.map((id) => '<a href="#library-' + id + '" class="' + (id === subject ? "on " + UI.toneOf(id) : "") + '" aria-label="' + E.subject(id).name + '">' + UI.subjectIcon(id) + '<span class="tl">' + E.subject(id).name + "</span></a>").join("") + "</div>";
+  const hitsHTML = (hits, limit, showSubject) => '<div class="small muted" style="margin:10px 2px">' + (hits.length ? hits.length + (hits.length > limit ? "+" : "") + " found" : "Nothing found") + "</div>" + hits.slice(0, limit).map((h) => '<div class="lib-word">' + (h.say ? hear(h.say) : "") + '<div class="grow"><b>' + esc(h.label) + '</b><div class="small muted">' + (showSubject ? esc(E.subject(h.subject).name) + " · " : "") + "Level " + h.n + (h.sub ? " · " + esc(h.sub) : "") + '</div></div><button class="lib-ans" data-open="' + h.n + '" data-subj="' + h.subject + '">Open</button></div>').join("");
+  // All tab: one search box across every subject in the grade.
+  function libraryAll(root) {
+    let pre = ""; try { pre = sessionStorage.getItem("gka.libq") || ""; sessionStorage.removeItem("gka.libq"); } catch (e) { /* ignore */ }
+    const counts = SUBJECTS.map((id) => { const t = totals(id, E.levels(id)); return '<div class="kv"><span>' + E.subject(id).name + "</span><b>" + esc(totalsLine(id, t)) + "</b></div>"; }).join("");
+    root.innerHTML = '<div class="screen">' + V._topbar() + '<h1 style="font-size:28px;margin-top:18px">Library</h1><div class="small muted">Search everything ' + esc(Store.get().kid.name) + " can study in " + esc(Store.gradeName(Store.grade())) + ".</div>" + tabs("all") +
+      '<label class="findbox">' + UI.icon("search") + '<input id="allsearch" type="search" placeholder="Search all subjects" autocomplete="off" value="' + esc(pre) + '"></label><div id="allresults"></div><div class="card flat" style="margin-top:14px">' + counts + "</div></div>" + V._bottomNav("library");
+    V._bindGrade(root);
+    const box = root.querySelector("#allsearch"), out = root.querySelector("#allresults");
+    const run = () => {
+      const q = box.value.trim().toLowerCase(); if (q.length < 2) { out.innerHTML = ""; return; }
+      out.innerHTML = hitsHTML(searchHits(SUBJECTS, q, 80), 80, true);
+      out.querySelectorAll("[data-say]").forEach((b) => { b.onclick = () => Speech.speak(b.dataset.say, { rate: Store.get().settings.rate }); });
+      out.querySelectorAll("[data-open]").forEach((b) => { b.onclick = () => { try { sessionStorage.setItem("gka.libopen", b.dataset.open); } catch (e) { /* ignore */ } window.GKA.App.go("library-" + b.dataset.subj); }; });
+    };
+    box.oninput = run; run(); if (!pre) setTimeout(() => box.focus(), 50);
+  }
+
   // Body of one level, built only when the level is opened.
   function levelBody(subject, L) {
     if (subject === "reading") {
@@ -63,13 +82,55 @@ window.GKA = window.GKA || {};
     return L.skill;
   };
 
+  function searchHits(subjects, q, limit) {
+    const hits = [];
+    for (const subject of subjects) for (const L of E.levels(subject)) {
+      const add = (h) => { h.subject = subject; h.n = L.n; hits.push(h); };
+      for (const w of L.words || []) if (w.w.toLowerCase().includes(q) || (w.s || "").toLowerCase().includes(q)) add({ label: w.w, sub: w.s, say: w.w + ". " + (w.s || "") });
+      for (const st of L.stories || []) if ((st.title + " " + st.text).toLowerCase().includes(q)) add({ label: "Story: " + st.title, sub: L.name });
+      if (L.lesson && L.lesson.toLowerCase().includes(q)) add({ label: "Lesson: " + L.name, sub: L.skill });
+      for (const it of L.items || []) { const txt = it.text || it.t || ""; if (((it.title || "") + " " + txt).toLowerCase().includes(q)) add({ label: it.title || txt.slice(0, 60), sub: L.name }); }
+      for (const v of (L.vocab || []).concat(L.sort || [])) if (v[0].toLowerCase().includes(q)) add({ label: v[1] + " " + v[0], sub: L.name, say: v[0] });
+      if (subject === "math" && (L.name + " " + L.skill).toLowerCase().includes(q)) add({ label: "Math: " + L.name, sub: L.skill });
+      if (hits.length > limit) return hits;
+    }
+    return hits;
+  }
+  // Flashcards for any level: words with pictures and sentences, flip, hear, shuffle. Study only, nothing is graded.
+  function flashcards(cards, title) {
+    let i = 0, flipped = false; const rate = Store.get().settings.rate;
+    const m = UI.modal('<h2>' + esc(title) + '</h2><div class="fc"><button class="fc-card" id="fc-card" aria-live="polite"></button><div class="small muted" id="fc-n"></div><div class="fc-nav"><button class="btn" id="fc-prev" aria-label="Previous">' + UI.icon("back") + '</button><button class="btn" id="fc-say">' + UI.icon("ear") + ' Hear</button><button class="btn" id="fc-mix">' + UI.icon("shuffle") + ' Shuffle</button><button class="btn primary" id="fc-next" aria-label="Next">' + UI.icon("next") + '</button></div><button class="btn flat" id="fc-close">Close</button></div>');
+    const q = (id) => m.el.querySelector("#" + id);
+    const show = () => {
+      const c = cards[i];
+      q("fc-card").innerHTML = flipped ? '<div class="fc-word">' + esc(c.w) + '</div><div class="fc-back">' + esc(c.s || "Say it, spell it, use it in a sentence.") + "</div>" : (c.pic ? '<div class="fc-pic">' + c.pic + "</div>" : "") + '<div class="fc-word">' + esc(c.w) + '</div><div class="small muted">Tap the card to flip</div>';
+      q("fc-n").textContent = (i + 1) + " of " + cards.length;
+      Speech.speak(flipped && c.s ? c.s : c.w, { rate });
+    };
+    q("fc-card").onclick = () => { flipped = !flipped; show(); };
+    q("fc-prev").onclick = () => { i = (i - 1 + cards.length) % cards.length; flipped = false; show(); };
+    q("fc-next").onclick = () => { i = (i + 1) % cards.length; flipped = false; show(); };
+    q("fc-mix").onclick = () => { cards = U.shuffle(cards); i = 0; flipped = false; show(); };
+    q("fc-say").onclick = () => { const c = cards[i]; Speech.speak(c.w + (c.s ? ". " + c.s : ""), { rate }); };
+    q("fc-close").onclick = () => { Speech.stop(); m.close(); };
+    let x0 = null; q("fc-card").addEventListener("touchstart", (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+    q("fc-card").addEventListener("touchend", (e) => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 50) { i = (i + (dx < 0 ? 1 : -1) + cards.length) % cards.length; flipped = false; show(); } });
+    show();
+  }
+  const cardsOf = (subject, L) => (L.words || []).map((w) => ({ w: w.w, s: w.s, pic: E.pictureFor(w.w) })).concat((L.vocab || []).map((v) => ({ w: v[0], pic: v[1] }))).concat((L.sort || []).map((v) => ({ w: v[0], pic: v[1], s: v[0] + " is a " + v[2] + " word." })));
+  const levelTools = (subject, L) => {
+    const unlocked = Store.isUnlocked(subject, L.n); const cards = cardsOf(subject, L).length;
+    return '<div class="lib-tools">' + (cards ? '<button class="btn" data-fc="' + L.n + '">' + UI.icon("cards") + " Flashcards</button>" : "") + (unlocked ? '<a class="btn soft-blue" href="#hub-' + subject + "-" + L.n + '">' + UI.icon("play") + " Practice this level</a>" : "") + '<button class="btn" data-nova-lv="' + L.n + '">' + UI.icon("chat") + " Ask Nova</button></div>";
+  };
+
   V.library = (root, subject) => {
     if (!Store.hasProfile()) return window.GKA.App.go("profiles");
+    if (subject === "all") return libraryAll(root);
     subject = SUBJECTS.includes(subject) ? subject : "reading";
     const levels = E.levels(subject); const tone = UI.toneOf(subject); const t = totals(subject, levels);
     root.innerHTML = '<div class="screen">' + V._topbar() +
       '<h1 style="font-size:28px;margin-top:18px">Library</h1><div class="small muted">Everything ' + esc(Store.get().kid.name) + " can study in " + esc(Store.gradeName(Store.grade())) + ". Tap a level to open it, tap the ear to hear it.</div>" +
-      '<div class="subject-tabs" style="margin-top:14px">' + SUBJECTS.map((id) => '<a href="#library-' + id + '" class="' + (id === subject ? "on " + UI.toneOf(id) : "") + '" aria-label="' + E.subject(id).name + '">' + UI.subjectIcon(id) + '<span class="tl">' + E.subject(id).name + "</span></a>").join("") + "</div>" +
+      tabs(subject) +
       '<div class="card flat lib-total ' + tone + '"><div style="font-weight:900">' + E.subject(subject).name + " · " + t.levels + ' levels</div><div class="small">' + totalsLine(subject, t) + "</div></div>" +
       (subject !== "math" ? '<input class="input" id="libsearch" type="search" placeholder="Search words, stories and lessons" autocomplete="off" style="margin-top:12px">' : "") +
       '<div id="libresults"></div><div class="lib-levels">' + levels.map((L) => '<details class="lib-level" data-n="' + L.n + '"><summary><span class="lib-n ' + tone + '">' + L.n + '</span><span class="grow"><b>' + esc(L.name) + '</b><span class="small muted">' + esc(countLabel(subject, L)) + "</span></span>" + UI.icon("chev") + '</summary><div class="lib-body"></div></details>').join("") + "</div></div>" + V._bottomNav("library");
@@ -78,22 +139,22 @@ window.GKA = window.GKA || {};
     const bindBody = (el) => {
       el.querySelectorAll("[data-say]").forEach((b) => { b.onclick = (e) => { e.preventDefault(); Speech.speak(b.dataset.say, { rate }); }; });
       el.querySelectorAll("[data-ans]").forEach((b) => { b.onclick = () => { b.outerHTML = '<div class="lib-answer">' + UI.icon("check") + " " + esc(b.dataset.ans) + "</div>"; }; });
-      el.querySelectorAll("[data-more]").forEach((b) => { b.onclick = () => { const body = b.closest(".lib-body"); body.innerHTML = levelBody(subject, E.level(subject, +b.dataset.more)); bindBody(body); }; });
+      el.querySelectorAll("[data-fc]").forEach((b) => { b.onclick = () => { const L = E.level(subject, +b.dataset.fc); flashcards(cardsOf(subject, L), "Level " + L.n + ": " + L.name); }; });
+      el.querySelectorAll("[data-nova-lv]").forEach((b) => { b.onclick = () => { if (window.GKA.Teacher) { window.GKA.Teacher.setFocus({ subject, n: +b.dataset.novaLv }); window.GKA.Teacher.open(); } }; });
+      el.querySelectorAll("[data-more]").forEach((b) => { b.onclick = () => { const body = b.closest(".lib-body"); const L = E.level(subject, +b.dataset.more); body.innerHTML = levelTools(subject, L) + levelBody(subject, L); bindBody(body); }; });
     };
-    root.querySelectorAll(".lib-level").forEach((d) => { d.addEventListener("toggle", () => { const body = d.querySelector(".lib-body"); if (d.open && !body.dataset.ready) { body.innerHTML = levelBody(subject, E.level(subject, +d.dataset.n)); body.dataset.ready = "1"; bindBody(body); } }); });
+    root.querySelectorAll(".lib-level").forEach((d) => { d.addEventListener("toggle", () => {
+      const body = d.querySelector(".lib-body"); const L = E.level(subject, +d.dataset.n);
+      if (d.open && window.GKA.Teacher) window.GKA.Teacher.setFocus({ subject, n: L.n });
+      if (d.open && !body.dataset.ready) { body.innerHTML = levelTools(subject, L) + levelBody(subject, L); body.dataset.ready = "1"; bindBody(body); }
+    }); });
+    let toOpen = null; try { toOpen = sessionStorage.getItem("gka.libopen"); sessionStorage.removeItem("gka.libopen"); } catch (e) { /* ignore */ }
+    if (toOpen) { const d = root.querySelector('.lib-level[data-n="' + toOpen + '"]'); if (d) { d.open = true; setTimeout(() => d.scrollIntoView({ block: "start" }), 60); } }
     const search = root.querySelector("#libsearch"); const out = root.querySelector("#libresults");
     if (search) search.oninput = () => {
       const q = search.value.trim().toLowerCase(); if (q.length < 2) { out.innerHTML = ""; return; }
-      const hits = [];
-      for (const L of levels) {
-        for (const w of L.words || []) if (w.w.toLowerCase().includes(q) || (w.s || "").toLowerCase().includes(q)) hits.push({ n: L.n, label: w.w, sub: w.s, say: w.w + ". " + (w.s || "") });
-        for (const st of L.stories || []) if ((st.title + " " + st.text).toLowerCase().includes(q)) hits.push({ n: L.n, label: "Story: " + st.title, sub: L.name });
-        if (L.lesson && L.lesson.toLowerCase().includes(q)) hits.push({ n: L.n, label: "Lesson: " + L.name, sub: L.skill });
-        for (const it of L.items || []) { const txt = it.text || it.t || ""; if (((it.title || "") + " " + txt).toLowerCase().includes(q)) hits.push({ n: L.n, label: it.title || txt.slice(0, 60), sub: L.name }); }
-        for (const v of (L.vocab || []).concat(L.sort || [])) if (v[0].toLowerCase().includes(q)) hits.push({ n: L.n, label: v[1] + " " + v[0], sub: L.name, say: v[0] });
-        if (hits.length > 60) break;
-      }
-      out.innerHTML = '<div class="small muted" style="margin:10px 2px">' + (hits.length ? hits.length + (hits.length > 60 ? "+" : "") + " found" : "Nothing found") + "</div>" + hits.slice(0, 60).map((h) => '<div class="lib-word">' + (h.say ? hear(h.say) : "") + '<div class="grow"><b>' + esc(h.label) + '</b><div class="small muted">Level ' + h.n + (h.sub ? " · " + esc(h.sub) : "") + '</div></div><button class="lib-ans" data-open="' + h.n + '">Open</button></div>').join("");
+      const hits = searchHits([subject], q, 60);
+      out.innerHTML = hitsHTML(hits, 60, false);
       bindBody(out);
       out.querySelectorAll("[data-open]").forEach((b) => { b.onclick = () => { const d = root.querySelector('.lib-level[data-n="' + b.dataset.open + '"]'); if (d) { d.open = true; d.scrollIntoView({ block: "start", behavior: "smooth" }); } }; });
     };

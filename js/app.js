@@ -7,7 +7,13 @@ window.GKA = window.GKA || {};
   let inPlay = false;
   const root = () => document.getElementById("app");
   App.go = (route) => { if (location.hash === "#" + route) render(); else location.hash = route; };
-  App.applyTheme = () => { const t = Store.settings().theme || "auto"; if (t === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", t); };
+  App.applyTheme = () => {
+    const st = Store.settings(); const h = document.documentElement; const t = st.theme || "auto";
+    if (t === "auto") h.removeAttribute("data-theme"); else h.setAttribute("data-theme", t);
+    // Comfort: bigger text, an easy-read font and calm mode (less motion).
+    h.dataset.textsize = st.textSize || "normal"; h.dataset.font = st.font || "normal";
+    if (st.calm) h.dataset.calm = "1"; else delete h.dataset.calm;
+  };
 
   function render() {
     const raw = (location.hash || "#home").slice(1);
@@ -15,6 +21,7 @@ window.GKA = window.GKA || {};
     const name = parts[0] || "home";
     if (inPlay && name !== "play") { Session.abort(); inPlay = false; }
     Speech.stop(); Speech.cancelListen();
+    if (window.GKA.Teacher) window.GKA.Teacher.onRoute(name);
     const el = root();
     window.scrollTo(0, 0);
     try {
@@ -29,6 +36,7 @@ window.GKA = window.GKA || {};
         inPlay = true;
         if (parts[1] === "placement") Session.start({ subject: "understand", n: 1, mode: "placement", source: "placement" }, el);
         else if (parts[1] === "words") Session.start({ subject: "reading", n: Store.currentLevel("reading"), mode: parts[2] || "read", source: "mywords" }, el);
+        else if (parts[1] === "mix") Session.start({ subject: parts[2] || "reading", n: Store.currentLevel(parts[2] || "reading"), mode: parts[3] || "read", source: "mix" }, el);
         else if (parts[1] === "review") Session.start({ subject: parts[2] || "reading", n: Store.currentLevel(parts[2] || "reading"), mode: parts[3] || "speak", source: "review" }, el);
         else { const subject = parts[1], n = parseInt(parts[2], 10) || 1, mode = parts[3] || "read", storyIx = parts[4] != null ? parseInt(parts[4], 10) : NaN; if (!Store.isUnlocked(subject, n)) { inPlay = false; UI.toast("That level is still locked", "warn"); return App.go("home-" + subject); } Session.start(Object.assign({ subject, n, mode, source: "level" }, Number.isInteger(storyIx) ? { story: storyIx } : {}), el); }
       }
@@ -47,7 +55,7 @@ window.GKA = window.GKA || {};
     Store.load();
     App.applyTheme();
     window.addEventListener("hashchange", render);
-    const warm = () => { if (Speech.ttsOK) { try { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); } catch (e) { /* ignore */ } } document.removeEventListener("pointerdown", warm); };
+    const warm = () => { Speech.unlock(); if (Speech.ttsOK) { try { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); } catch (e) { /* ignore */ } } document.removeEventListener("pointerdown", warm); };
     document.addEventListener("pointerdown", warm);
     document.addEventListener("pointerdown", (e) => { const t = e.target && e.target.closest ? e.target.closest(".btn, .option, .tile, .key, .node, .letter-btn, .wtile, .match-item, .chest, .profile-card, .subject-tabs a, .bottombar a, .claim") : null; if (t && !t.disabled && !t.classList.contains("used")) Speech.sfx("tap"); }, { passive: true });
     document.addEventListener("visibilitychange", () => { if (document.hidden) { Speech.stop(); Speech.cancelListen(); } });

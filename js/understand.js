@@ -115,14 +115,14 @@ window.GKA = window.GKA || {};
     const deck = [];
     if (guided && L.tip && E.QTYPES[L.tip]) deck.push({ type: "u-tip", tip: L.tip, graded: false });
     if (L.vocab || L.sort) {
-      if (L.sort) { const items = guided ? rotate(L.sort, 8, plays) : U.shuffle(L.sort).slice(0, 10); for (const [w, p, k] of items) deck.push({ type: "u-sort", word: w, pic: p, answer: k, graded: true }); return deck; }
-      if (guided) { const sel = rotate(L.vocab, 8, plays); for (let g = 0; g < sel.length; g += 4) { const grp = sel.slice(g, g + 4); for (const v of grp) deck.push({ type: "u-word", word: v[0], pic: v[1], graded: false }); for (const v of U.shuffle(grp)) deck.push(vocabCards(L, v, "wordpic")); } }
-      else U.shuffle(L.vocab).slice(0, 8).forEach((v, i) => deck.push(vocabCards(L, v, ["wordpic", "picword", "listen"][i % 3])));
+      if (L.sort) { const items = E.shuffleOn() ? E.draw("understand:" + L.n + ":sort", L.sort, guided ? 8 : 10) : guided ? rotate(L.sort, 8, plays) : U.shuffle(L.sort).slice(0, 10); for (const [w, p, k] of items) deck.push({ type: "u-sort", word: w, pic: p, answer: k, graded: true }); return deck; }
+      if (guided) { const sel = E.shuffleOn() ? E.draw("understand:" + L.n + ":vocab", L.vocab, 8) : rotate(L.vocab, 8, plays); for (let g = 0; g < sel.length; g += 4) { const grp = sel.slice(g, g + 4); for (const v of grp) deck.push({ type: "u-word", word: v[0], pic: v[1], graded: false }); for (const v of U.shuffle(grp)) deck.push(vocabCards(L, v, "wordpic")); } }
+      else (E.shuffleOn() ? E.draw("understand:" + L.n + ":vocab", L.vocab, 8) : U.shuffle(L.vocab).slice(0, 8)).forEach((v, i) => deck.push(vocabCards(L, v, ["wordpic", "picword", "listen"][i % 3])));
       return deck;
     }
-    if (L.items && L.items.length && L.items[0].t) { const items = guided ? rotate(L.items, 8, plays) : U.shuffle(L.items).slice(0, 8); for (const it of items) deck.push(sentenceCard(it, guided)); return deck; }
+    if (L.items && L.items.length && L.items[0].t) { const items = E.shuffleOn() ? E.draw("understand:" + L.n + ":items", L.items, 8) : guided ? rotate(L.items, 8, plays) : U.shuffle(L.items).slice(0, 8); for (const it of items) deck.push(sentenceCard(it, guided)); return deck; }
     // Levels can hold many passages: they are split into groups of at least 6 questions, and every replay moves on to the next group.
-    const groups = passageGroups(L.items), chosen = groups[plays % groups.length];
+    const groups = passageGroups(L.items), chosen = groups[E.shuffleOn() ? E.drawIdx("understand:" + L.n + ":group", groups.length, 1)[0] : plays % groups.length];
     for (const it of chosen) {
       const passage = E.passageOf(it);
       const qs = it.qs.map((q) => Object.assign({}, q, { ev: q.e ? locate(passage.paras, q.e) : null }));
