@@ -104,7 +104,7 @@ window.GKA = window.GKA || {};
   }
   function outOfHearts() {
     if (!st || st.ending) return; st.ending = true;
-    const m = UI.modal('<div style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px"><svg viewBox="0 0 120 120" style="width:110px;height:110px">' + UI.mascot("cat").replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "") + '</svg><h2>Out of hearts!</h2><p class="muted small">Hearts come back one every 15 minutes. Practicing a level you already passed, or your own words, refills them all right away.</p></div><div class="stack"><button class="btn primary" id="m-end">Finish for now</button><button class="btn" id="m-refill">Refill with 30 gems (' + RW().gems() + ' gems)</button></div>', { sticky: true });
+    const m = UI.modal('<div style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px"><svg viewBox="0 0 120 120" style="width:110px;height:110px">' + UI.mascot("wink").replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "") + '</svg><h2>Out of hearts!</h2><p class="muted small">Hearts come back one every 15 minutes. Practicing a level you already passed, or your own words, refills them all right away.</p></div><div class="stack"><button class="btn primary" id="m-end">Finish for now</button><button class="btn" id="m-refill">Refill with 30 gems (' + RW().gems() + ' gems)</button></div>', { sticky: true });
     m.el.querySelector("#m-end").onclick = () => { m.close(); finish(); };
     m.el.querySelector("#m-refill").onclick = () => { if (RW().buy("refill")) { m.close(); st.ending = false; drawHearts(); UI.toast("Hearts refilled", "ok"); } else UI.toast("Not enough gems yet", "warn"); };
   }
