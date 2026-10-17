@@ -99,6 +99,13 @@ window.GKA = window.GKA || {};
     return { type: "u-wordpic", word: v[0], pic: v[1], listen: kind === "listen", options: U.shuffle(U.shuffle(pics).slice(0, 3).concat([v[1]])), graded: true };
   };
 
+  const passageGroups = (pool) => {
+    const groups = []; let cur = [], qn = 0;
+    for (const it of pool) { cur.push(it); qn += (it.qs || []).length; if (qn >= 6) { groups.push(cur); cur = []; qn = 0; } }
+    if (cur.length) { for (let i = 0; groups.length && qn < 6 && i < pool.length; i++) { if (!cur.includes(pool[i])) { cur.push(pool[i]); qn += (pool[i].qs || []).length; } } groups.push(cur); }
+    return groups;
+  };
+
   /* Deck for an Understand level. guided = "Read together" (tips, chunks, Show me where); check = "Show what you know". */
   E.buildUnderstandDeck = (opts, L) => {
     if (opts.source === "placement") return E.placementDeck();
@@ -114,9 +121,8 @@ window.GKA = window.GKA || {};
       return deck;
     }
     if (L.items && L.items.length && L.items[0].t) { const items = guided ? rotate(L.items, 8, plays) : U.shuffle(L.items).slice(0, 8); for (const it of items) deck.push(sentenceCard(it, guided)); return deck; }
-    // Levels can hold many passages: each run takes a window of them (at least 6 questions), and the window moves on every replay.
-    const pool = L.items; let start = pool.length > 1 ? (plays * 2) % pool.length : 0; const chosen = []; let qn = 0;
-    for (let i = 0; i < pool.length && (qn < 6 || chosen.length < 1); i++) { const it = pool[(start + i) % pool.length]; chosen.push(it); qn += (it.qs || []).length; }
+    // Levels can hold many passages: they are split into groups of at least 6 questions, and every replay moves on to the next group.
+    const groups = passageGroups(L.items), chosen = groups[plays % groups.length];
     for (const it of chosen) {
       const passage = E.passageOf(it);
       const qs = it.qs.map((q) => Object.assign({}, q, { ev: q.e ? locate(passage.paras, q.e) : null }));
