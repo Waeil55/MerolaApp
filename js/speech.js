@@ -29,7 +29,7 @@ window.GKA = window.GKA || {};
     if (/premium|enhanced|siri/i.test(n)) s += 45;
     if (/google/i.test(n)) s += 35;
     if (/aria|jenny|ava|emma|michelle|samantha|allison|joanna|libby|sonia|natasha|clara|guy|andrew|brian/i.test(n)) s += 12;
-    if (/zira|hazel|susan|karen|moira|tessa/i.test(n)) s += 3; // friendlier among basic voices
+    if (/zira|hazel|susan|karen|moira|tessa|daniel|david/i.test(n)) s += 3; // friendlier among basic voices
     if (/en-US/i.test(v.lang)) s += 10; else if (/en-(GB|AU|CA|IE|NZ)/i.test(v.lang)) s += 6;
     if (v.localService === false) s += 4;
     if (/espeak|compact|novelty|whisper|bad news|bells|boing|bubbles|cellos|zarvox|trinoids|albert|jester|organ|superstar|wobble|grandma|grandpa|eddy|flo|reed|rocko|sandy|shelley/i.test(n)) s -= 120;
@@ -50,8 +50,9 @@ window.GKA = window.GKA || {};
   };
 
   // ----- Which engine speaks -----
-  // auto (the default) uses the best one available: a parent's ElevenLabs or OpenAI key, the free human voice that
-  // runs on this device (Kokoro), then the device's own voice.
+  // auto (the default) uses the best one available: a parent's ElevenLabs or OpenAI key, the app's own AI voice server
+  // (OpenAI tts-1 behind a Supabase function, the same voice as the Mariam app; no key on this device), the free human
+  // voice that runs on this device (Kokoro), then the device's own voice.
   S.AI_VOICES = {
     openai: [["nova", "Nova (bright, friendly)"], ["coral", "Coral (warm)"], ["shimmer", "Shimmer (soft)"], ["sage", "Sage (calm)"], ["alloy", "Alloy (neutral)"], ["fable", "Fable (storyteller)"], ["echo", "Echo (deep)"], ["ash", "Ash (clear)"]],
     elevenlabs: [["21m00Tcm4TlvDq8ikWAM", "Rachel (warm)"], ["EXAVITQu4vr4xnSDxMaL", "Sarah (soft)"], ["XrExE9yKIg1WjnnlVkGX", "Matilda (friendly)"], ["pFZP5JQG7iQjIQuC4Bku", "Lily (clear)"], ["TX3LPaxmHKxFdv7VOQHJ", "Liam (bright)"], ["onwK4e9ZLuTAKqWW03F9", "Daniel (calm)"]],
@@ -60,14 +61,27 @@ window.GKA = window.GKA || {};
   S.inFrame = (() => { try { return window.top !== window; } catch (e) { return true; } })();
   S.kokoroOK = !S.inFrame && typeof Worker !== "undefined" && typeof WebAssembly !== "undefined" && /^https?:$/.test(location.protocol);
   S.broken = {};
+  // The app's voice server. It answers a quick check when the app opens; until it says ready, the other voices speak.
+  S.CLOUD_URL = "https://bgkugdyrqtsglavoghvb.supabase.co/functions/v1/kids-tts";
+  S.cloud = { state: "idle" };
+  S.cloudCheck = () => {
+    if (S.cloud.state === "checking" || S.cloud.state === "ready") return S.cloud.p || Promise.resolve(S.cloud.state === "ready");
+    if (S.inFrame || !/^https?:$/.test(location.protocol) || typeof fetch === "undefined") { S.cloud.state = "off"; return Promise.resolve(false); }
+    S.cloud.state = "checking";
+    const ctl = typeof AbortController !== "undefined" ? new AbortController() : null; const t = setTimeout(() => ctl && ctl.abort(), 6000);
+    S.cloud.p = fetch(S.CLOUD_URL, { method: "GET", signal: ctl ? ctl.signal : undefined, cache: "no-store" })
+      .then((r) => r.ok ? r.json() : { ok: false }).then((j) => !!(j && j.ok)).catch(() => false)
+      .then((ok) => { clearTimeout(t); S.cloud.state = ok ? "ready" : "off"; window.dispatchEvent(new Event("gka-voice")); return ok; });
+    return S.cloud.p;
+  };
   S.engine = () => {
     const e = settings().voiceEngine || "auto"; const k = S.keys();
-    const has = { elevenlabs: !!k.elevenlabs, openai: !!k.openai, kokoro: S.kokoroOK, device: true };
-    const order = e === "auto" ? ["elevenlabs", "openai", "kokoro", "device"] : [e, "kokoro", "device"];
+    const has = { elevenlabs: !!k.elevenlabs, openai: !!k.openai, cloud: S.cloud.state === "ready", kokoro: S.kokoroOK, device: true };
+    const order = e === "auto" ? ["elevenlabs", "openai", "cloud", "kokoro", "device"] : [e, "cloud", "kokoro", "device"];
     for (const x of order) if (has[x] && !S.broken[x]) return x;
     return "device";
   };
-  S.engineLabel = () => ({ device: "Voice on this device", openai: "OpenAI AI voice", elevenlabs: "ElevenLabs AI voice", kokoro: "Free human AI voice (on this device)" })[S.engine()];
+  S.engineLabel = () => ({ device: "Voice on this device", openai: "OpenAI AI voice", elevenlabs: "ElevenLabs AI voice", cloud: "AI human voice (OpenAI, same as Mariam)", kokoro: "Free human AI voice (on this device)" })[S.engine()];
 
   // ----- Free human voice on this device (Kokoro in a worker) -----
   S.kokoro = { state: "idle", pct: 0 };
@@ -97,12 +111,14 @@ window.GKA = window.GKA || {};
   const CACHE = "gka-voice-v1";
   const hash = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36) + str.length.toString(36); };
   const clipKey = (eng, voice, text) => eng + "/" + voice + "/" + hash(text);
-  const aiVoice = (eng) => eng === "openai" ? (settings().aiVoice || "nova") : eng === "kokoro" ? (settings().kokoroVoice || "af_heart") : (settings().elevenVoice || "21m00Tcm4TlvDq8ikWAM");
+  const aiVoice = (eng) => eng === "openai" || eng === "cloud" ? (settings().aiVoice || "nova") : eng === "kokoro" ? (settings().kokoroVoice || "af_heart") : (settings().elevenVoice || "21m00Tcm4TlvDq8ikWAM");
   async function fetchClip(eng, voice, text, urgent) {
     if (eng === "kokoro") return kokoroGen(text, voice, urgent);
     const k = S.keys();
     let res;
-    if (eng === "openai") {
+    if (eng === "cloud") {
+      res = await fetch(S.CLOUD_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, voice }) });
+    } else if (eng === "openai") {
       res = await fetch("https://api.openai.com/v1/audio/speech", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + k.openai },
         body: JSON.stringify({ model: "gpt-4o-mini-tts", voice, input: text, response_format: "mp3", instructions: "You are a warm, cheerful, patient teacher reading to a child. Speak clearly and naturally, with gentle expression. Say single words crisply." }) });
     } else {
@@ -183,6 +199,12 @@ window.GKA = window.GKA || {};
         if (!won) throw new Error(NOT_READY);
       }
     }
+    if (eng === "cloud" && !(await cachedClip(eng, chunks[0].t))) {
+      const first = getClip(eng, chunks[0].t, true); first.catch(() => {});
+      const won = await Promise.race([first.then(() => true, (e) => { throw e; }), new Promise((r) => setTimeout(() => r(false), opts.patient ? 12000 : 4000))]);
+      if (!won) throw new Error(NOT_READY);
+      if (my !== token) return false;
+    }
     let next = getClip(eng, chunks[0].t, true);
     for (let i = 0; i < chunks.length; i++) {
       const url = await next;
@@ -196,11 +218,18 @@ window.GKA = window.GKA || {};
   }
 
   // ----- Device voice -----
+  let keepAlive = null;
+  const isAndroid = /android/i.test(navigator.userAgent || "");
+  const stopKeepAlive = () => { if (keepAlive) { clearInterval(keepAlive); keepAlive = null; } };
+  // Chrome on computers stops long speech after about 15 seconds; a pause and resume every 10 seconds keeps it going.
+  const startKeepAlive = () => { stopKeepAlive(); if (isAndroid) return; keepAlive = setInterval(() => { if (synth.speaking && !synth.paused) { synth.pause(); synth.resume(); } else stopKeepAlive(); }, 10000); };
+  const cleanForSpeech = (t) => String(t).replace(/[*_#`~[\]]/g, " ").replace(/\s+/g, " ").trim();
   function speakDevice(text, opts) {
     return new Promise((resolve) => {
       if (!synth || !text) return resolve(false);
       try { synth.cancel(); } catch (e) { /* ignore */ }
-      const u = new SpeechSynthesisUtterance(String(text));
+      const myTurn = token;
+      const u = new SpeechSynthesisUtterance(cleanForSpeech(text));
       const v = S.pickVoice(opts.voiceURI != null ? opts.voiceURI : settings().voiceURI);
       if (v) u.voice = v;
       u.lang = (v && v.lang) || "en-US";
@@ -208,11 +237,15 @@ window.GKA = window.GKA || {};
       u.pitch = opts.pitch || (S.isNatural(v) ? 1 : 1.05);
       u.volume = 1;
       let done = false;
-      const finish = (ok) => { if (done) return; done = true; resolve(ok); };
+      const finish = (ok) => { if (done) return; done = true; stopKeepAlive(); resolve(ok); };
       u.onend = () => finish(true);
       u.onerror = () => finish(false);
       if (opts.onBoundary) u.onboundary = (ev) => { if (ev.name === "word" || ev.charIndex != null) opts.onBoundary(ev.charIndex, ev.charLength); };
-      synth.speak(u);
+      // Chromium drops a new utterance that starts in the same moment as cancel(): wait a tick, and wake a stuck pause.
+      setTimeout(() => {
+        if (done || myTurn !== token) return finish(false);
+        try { if (synth.paused) synth.resume(); synth.speak(u); startKeepAlive(); } catch (e) { finish(false); }
+      }, 60);
       // Safety: some browsers never fire onend for short strings.
       const est = 1500 + String(text).length * 90 / (u.rate || 1);
       setTimeout(() => { if (!done && !synth.speaking) finish(true); }, est);
@@ -236,7 +269,7 @@ window.GKA = window.GKA || {};
         if (msg !== NOT_READY) {
           S.lastError = msg;
           // A network or key problem: use the next voice for the rest of this visit instead of failing again.
-          if (!navigator.onLine || /401|403|invalid|key|unauthor|Failed to fetch|NetworkError|Load failed|credit|quota|limit/i.test(msg)) S.broken[eng] = true;
+          if (eng === "cloud" || !navigator.onLine || /401|403|invalid|key|unauthor|Failed to fetch|NetworkError|Load failed|credit|quota|limit/i.test(msg)) S.broken[eng] = true;
         }
       }
     }
@@ -251,11 +284,10 @@ window.GKA = window.GKA || {};
   };
   // Start the free human voice in the background once the app is open (not on a phone that asks to save data).
   S.boot = () => {
-    const st = settings();
     const saveData = navigator.connection && navigator.connection.saveData;
-    if (S.engine() === "kokoro" && !saveData) setTimeout(S.kokoroStart, 1200);
+    S.cloudCheck().then(() => { if (S.engine() === "kokoro" && !saveData) setTimeout(S.kokoroStart, 1200); });
   };
-  S.test = async (eng, sample) => { S.broken = {}; S.lastError = ""; const t = sample || "Hi! I am Nova, your teacher. Let's learn something amazing today."; if (eng === "device") return speakDevice(t, {}); return speakAI(eng, t, { patient: true }); };
+  S.test = async (eng, sample) => { S.broken = {}; S.lastError = ""; if (eng === "cloud" && S.cloud.state !== "ready") { S.cloud.state = "idle"; if (!(await S.cloudCheck())) throw new Error("The AI voice server is not reachable yet"); } const t = sample || "Hi! I am Nova, your teacher. Let's learn something amazing today."; if (eng === "device") return speakDevice(t, {}); return speakAI(eng, t, { patient: true }); };
   S.clearVoiceCache = async () => { memo.forEach((u) => URL.revokeObjectURL(u)); memo.clear(); try { if (window.caches) await caches.delete(CACHE); } catch (e) { /* ignore */ } };
   S.stop = () => {
     token++;

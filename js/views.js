@@ -305,13 +305,13 @@ window.GKA = window.GKA || {};
     return '<div class="dash-card" style="margin-top:16px"><h3>Voice and AI teacher</h3>' +
       '<div class="ai-status"><div><span class="small muted">Voice now</span><b id="ai-voice-now">' + U.esc(Speech.engineLabel()) + '</b></div><div><span class="small muted">Nova teacher</span><b id="ai-teach-now">' + U.esc(T ? T.providerLabel() : "Built-in help") + '</b></div></div>' +
       '<div class="small" id="ai-kokoro" style="margin-top:8px">' + U.esc(kokoroLine()) + "</div>" +
-      '<div class="small muted" style="margin-top:8px">Without any setup the app uses a free human-sounding AI voice that runs on this device, and Nova gives built-in help. To let Nova answer anything like a real teacher, add an Anthropic (Claude) key. For the fastest cloud voice, add an ElevenLabs key. In the Claude app version, Nova already uses Claude for free.</div>' +
+      '<div class="small muted" style="margin-top:8px">Without any setup the app speaks with the same OpenAI human voice as the Mariam app (from the app voice server, no key needed here), then the free voice that runs on this device, and Nova gives built-in help. To let Nova answer anything like a real teacher, add an Anthropic (Claude) key. For the fastest cloud voice, add an ElevenLabs key. In the Claude app version, Nova already uses Claude for free.</div>' +
       '<div class="row wrap" style="margin-top:12px">' + '<button class="btn" id="ai-testv">' + UI.icon("ear") + ' Test voice</button><button class="btn" id="ai-testt">' + UI.icon("chat") + " Test Nova</button></div>" +
       '<div class="setting-grid" style="margin-top:12px">' +
-        field("Voice", sel("ai-engine", [["auto", "Automatic: best voice available"], ["kokoro", "Free human voice (on this device)"], ["elevenlabs", "ElevenLabs (your key)"], ["openai", "OpenAI (your key)"], ["device", "Device voice only"]], st.voiceEngine || "auto")) +
+        field("Voice", sel("ai-engine", [["auto", "Automatic: best voice available"], ["cloud", "AI human voice (OpenAI, same as Mariam)"], ["kokoro", "Free human voice (on this device)"], ["elevenlabs", "ElevenLabs (your key)"], ["openai", "OpenAI (your key)"], ["device", "Device voice only"]], st.voiceEngine || "auto")) +
         field("Human voice", sel("ai-kvoice", Speech.AI_VOICES.kokoro, st.kokoroVoice || "af_heart")) +
         field("ElevenLabs voice", sel("ai-evoice", Speech.AI_VOICES.elevenlabs, st.elevenVoice || "21m00Tcm4TlvDq8ikWAM")) +
-        field("OpenAI voice", sel("ai-ovoice", Speech.AI_VOICES.openai, st.aiVoice || "nova")) +
+        field("OpenAI voice (also the voice server)", sel("ai-ovoice", Speech.AI_VOICES.openai, st.aiVoice || "nova")) +
       '</div><details class="ai-keys" open style="margin-top:12px"><summary>Keys for Nova and the fastest voice</summary><div class="setting-grid" style="margin-top:10px">' +
         field("Nova teacher uses", sel("ai-prov", [["auto", "Automatic (best available)"], ["anthropic", "Claude (Anthropic key)"], ["openai", "OpenAI (OpenAI key)"]], st.aiProvider || "auto")) +
         field("Claude model", sel("ai-model", [["claude-haiku-5-5", "Fastest: Claude Haiku 5.5"], ["claude-sonnet-5-5", "Smartest: Claude Sonnet 5.5"]], st.aiModel || "claude-haiku-5-5")) +
