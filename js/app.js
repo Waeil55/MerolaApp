@@ -66,7 +66,8 @@ window.GKA = window.GKA || {};
     document.addEventListener("visibilitychange", () => { if (document.hidden) { Speech.stop(); Speech.cancelListen(); } });
     if (!location.hash) location.hash = Store.hasProfile() ? "home" : "profiles"; else render();
     // PWA: offline cache + install button. Skipped when opened from a file or inside an artifact frame.
-    if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol) && window.top === window) {
+    // The iPhone and Android apps already hold every file, so they skip the offline cache.
+    if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol) && window.top === window && !Speech.native) {
       navigator.serviceWorker.register("sw.js").then((reg) => {
         reg.addEventListener("updatefound", () => { const nw = reg.installing; if (!nw) return; nw.addEventListener("statechange", () => { if (nw.state === "installed" && navigator.serviceWorker.controller) { App.updateReady = reg; UI.toast("A new version is ready. Reopen the app to update.", "ok"); } }); });
       }).catch(() => { /* offline mode unavailable, the app still runs */ });

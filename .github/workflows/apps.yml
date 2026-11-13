@@ -1,0 +1,114 @@
+# Builds the iPhone and Android apps on GitHub's computers (an iPhone app can only be built on a Mac).
+# Without store keys it checks that both apps build and keeps a test Android app (APK) to download.
+# With the App Store keys saved as repository secrets it also sends the iPhone app to App Store Connect (TestFlight).
+#   APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8   (see store/STORE-STEPS.md)
+name: Phone apps
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: "Send the iPhone app to App Store Connect (needs the App Store secrets)"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths-ignore: ["audio/**", "**.md"]
+
+concurrency:
+  group: phone-apps-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The recorded voice clips are streamed from the website, not built into the app.
+          sparse-checkout: |
+            /*
+            !/audio/
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Pick the newest Xcode
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$X" ] && sudo xcode-select -s "$X/Contents/Developer"
+          xcodebuild -version
+      - name: Prepare the app
+        run: |
+          npm ci
+          node tools/build-native.js
+          npx cap sync ios
+      - name: Build check (simulator, no signing)
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.upload) }}
+        run: |
+          xcodebuild build -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO | tail -n 30
+      - name: Archive and upload to App Store Connect
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.upload }}
+        env:
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+          KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          if [ -z "$TEAM" ] || [ -z "$KEY_ID" ] || [ -z "$ISSUER" ] || [ -z "$KEY_P8" ]; then echo "Add the App Store secrets first (store/STORE-STEPS.md)"; exit 1; fi
+          KEY="$RUNNER_TEMP/AuthKey.p8"; printf '%s' "$KEY_P8" > "$KEY"
+          VERSION=$(node -p "require('./package.json').version")
+          AUTH="-allowProvisioningUpdates -authenticationKeyPath $KEY -authenticationKeyID $KEY_ID -authenticationKeyIssuerID $ISSUER"
+          xcodebuild archive -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/App.xcarchive" $AUTH \
+            DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" | tail -n 40
+          cat > "$RUNNER_TEMP/export.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$TEAM</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/export.plist" -exportPath "$RUNNER_TEMP/export" $AUTH | tail -n 40
+          rm -f "$KEY"
+          echo "Uploaded build ${{ github.run_number }} (version $VERSION). It appears in App Store Connect, TestFlight, after Apple processes it."
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            /*
+            !/audio/
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Build the test app (APK)
+        run: |
+          npm ci
+          node tools/build-native.js
+          npx cap sync android
+          cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: genius-kids-test-app
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14

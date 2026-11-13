@@ -363,7 +363,17 @@ window.GKA = window.GKA || {};
   function showBackupText(txt) { const m = UI.modal('<h2>Your backup</h2><p class="muted small">Select all the text below and copy it.</p><textarea class="input" id="bk" readonly></textarea><button class="btn primary" id="c">Done</button>'); m.el.querySelector("#bk").value = txt; m.el.querySelector("#bk").select(); m.el.querySelector("#c").onclick = m.close; }
   const field = (label, control) => '<div><label class="lbl">' + label + "</label>" + control + "</div>";
   const sel = (id, opts, val) => '<select class="input" id="' + id + '">' + opts.map(([v, l]) => '<option value="' + v + '"' + (v === val ? " selected" : "") + ">" + l + "</option>").join("") + "</select>";
+  const NUM = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
+  let grownUpOK = false;
+  function grownUpGate(root, onOK) {
+    const a = 13 + Math.floor(Math.random() * 7), b = 6 + Math.floor(Math.random() * 4), ans = String(a * b); let entered = "";
+    root.innerHTML = '<div class="screen">' + topbar() + '<div class="card lg" style="margin-top:18px;text-align:center"><div style="font-weight:900;font-size:20px">Grown-ups only</div><div class="small muted" style="margin-top:4px">To open the parents area, type the answer:</div><div style="font-weight:800;font-size:18px;margin-top:10px">What is ' + NUM[a] + " times " + NUM[b] + '?</div><div class="giant sm" id="gans" style="min-height:44px;margin:12px 0">&nbsp;</div><div class="pinpad" id="pad">' + ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"].map((k) => k === "" ? "<span></span>" : k === "del" ? '<button class="key del" data-k="del" aria-label="Delete">' + UI.icon("back") + "</button>" : '<button class="key" data-k="' + k + '">' + k + "</button>").join("") + '</div><div id="pinmsg" class="small muted" style="margin-top:12px;min-height:20px"></div></div></div>' + bottomNav("parent");
+    bindGrade(root);
+    const show = () => { root.querySelector("#gans").textContent = entered || "\u00a0"; };
+    root.querySelectorAll("#pad .key").forEach((b2) => { b2.onclick = () => { const k = b2.dataset.k; if (k === "del") entered = entered.slice(0, -1); else if (entered.length < 3) entered += k; show(); if (entered.length === ans.length) { if (entered === ans) { grownUpOK = true; onOK(); } else { root.querySelector("#pinmsg").textContent = "Not quite. Ask a grown-up."; Speech.sfx("no"); setTimeout(() => grownUpGate(root, onOK), 700); } } }; });
+  }
   function pinGate(root, onOK) {
+    if (!grownUpOK) return grownUpGate(root, () => pinGate(root, onOK));
     let entered = "";
     root.innerHTML = '<div class="screen">' + topbar() + '<div class="card lg" style="margin-top:18px;text-align:center"><div style="font-weight:900;font-size:20px">Parents only</div><div class="small muted" style="margin-top:4px">Enter the parent PIN. The first PIN is 1234.</div><div class="pin-dots" style="margin:18px 0" id="dots"><i></i><i></i><i></i><i></i></div><div class="pinpad" id="pad">' + ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"].map((k) => k === "" ? "<span></span>" : k === "del" ? '<button class="key del" data-k="del" aria-label="Delete">' + UI.icon("back") + "</button>" : '<button class="key" data-k="' + k + '">' + k + "</button>").join("") + '</div><div id="pinmsg" class="small muted" style="margin-top:12px;min-height:20px"></div></div></div>' + bottomNav("parent");
     bindGrade(root);

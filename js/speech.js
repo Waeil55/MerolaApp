@@ -8,8 +8,15 @@ window.GKA = window.GKA || {};
   const S = {};
   const synth = window.speechSynthesis || null;
   const Rec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-  S.ttsOK = !!synth;
-  S.sttOK = !!Rec;
+  // Inside the iPhone and Android apps (Capacitor) the phone's own voice and speech recognition are used through
+  // plugins: Android's web view has neither, and the phone's are better than a web page's.
+  const cap = window.Capacitor;
+  S.native = !!(cap && cap.isNativePlatform && cap.isNativePlatform());
+  const plugin = (name) => { if (!S.native) return null; try { return cap.registerPlugin ? cap.registerPlugin(name) : (cap.Plugins || {})[name] || null; } catch (e) { return null; } };
+  const NTTS = plugin("TextToSpeech"), NSR = plugin("SpeechRecognition");
+  S.ttsOK = !!synth || !!NTTS;
+  S.sttOK = !!Rec || !!NSR;
+  if (NSR) NSR.available().then((r) => { S.sttOK = !!(r && r.available) || !!Rec; }).catch(() => {});
   S.voices = [];
   S.listening = false;
   S.lastError = "";
@@ -59,7 +66,7 @@ window.GKA = window.GKA || {};
     kokoro: [["af_heart", "Heart (warm, friendly)"], ["af_bella", "Bella (bright)"], ["af_nova", "Nova (clear)"], ["af_sarah", "Sarah (gentle)"], ["am_michael", "Michael (calm)"], ["bf_emma", "Emma (British)"]]
   };
   S.inFrame = (() => { try { return window.top !== window; } catch (e) { return true; } })();
-  S.kokoroOK = !S.inFrame && typeof Worker !== "undefined" && typeof WebAssembly !== "undefined" && /^https?:$/.test(location.protocol);
+  S.kokoroOK = !S.inFrame && !S.native && typeof Worker !== "undefined" && typeof WebAssembly !== "undefined" && /^https?:$/.test(location.protocol);
   S.broken = {};
   // The app's voice server (kids-tts). It may live in either Supabase project; the app asks each when it opens and uses
   // the first that says ready. Until then the other voices speak.
@@ -73,7 +80,7 @@ window.GKA = window.GKA || {};
   };
   S.cloudCheck = () => {
     if (S.cloud.state === "checking" || S.cloud.state === "ready") return S.cloud.p || Promise.resolve(S.cloud.state === "ready");
-    if (S.inFrame || !/^https?:$/.test(location.protocol) || typeof fetch === "undefined") { S.cloud.state = "off"; return Promise.resolve(false); }
+    if (S.inFrame || S.native || !/^https?:$/.test(location.protocol) || typeof fetch === "undefined") { S.cloud.state = "off"; return Promise.resolve(false); }
     S.cloud.state = "checking";
     const urls = S.CLOUD_URLS.indexOf(S.CLOUD_URL) < 0 ? [S.CLOUD_URL] : S.CLOUD_URLS;
     S.cloud.p = Promise.all(urls.map(cloudPing)).then((oks) => {
@@ -232,7 +239,14 @@ window.GKA = window.GKA || {};
   // Chrome on computers stops long speech after about 15 seconds; a pause and resume every 10 seconds keeps it going.
   const startKeepAlive = () => { stopKeepAlive(); if (isAndroid) return; keepAlive = setInterval(() => { if (synth.speaking && !synth.paused) { synth.pause(); synth.resume(); } else stopKeepAlive(); }, 10000); };
   const cleanForSpeech = (t) => String(t).replace(/[*_#`~[\]]/g, " ").replace(/\s+/g, " ").trim();
+  function speakNative(text, opts) {
+    const my = token;
+    return NTTS.stop().catch(() => {}).then(() => my !== token ? false :
+      NTTS.speak({ text: cleanForSpeech(text), lang: "en-US", rate: Math.max(0.4, Math.min(1.6, (opts.rate || 0.9) / 0.9)), pitch: opts.pitch || 1, volume: 1, category: "playback" })
+        .then(() => my === token, () => false));
+  }
   function speakDevice(text, opts) {
+    if (NTTS && text) return speakNative(text, opts);
     return new Promise((resolve) => {
       if (!synth || !text) return resolve(false);
       try { synth.cancel(); } catch (e) { /* ignore */ }
@@ -264,7 +278,8 @@ window.GKA = window.GKA || {};
   // ----- Recorded voice: every lesson word and sentence, recorded once with the free human voice (Kokoro, af_heart)
   // and published with the app in audio/v1. Instant, free, the same on every device. audio/v1/index.txt lists what is recorded.
   const VK = window.GKA.VoiceKey;
-  const REC_DIR = "audio/v1/";
+  // The apps stream the clips from the website (they are not inside the app download) and keep each one after it plays.
+  const REC_DIR = S.native ? "https://waeil55.github.io/MerolaApp/audio/v1/" : "audio/v1/";
   let recSet = null;
   S.rec = { state: "idle", count: 0 };
   S.recLoad = () => {
@@ -361,6 +376,7 @@ window.GKA = window.GKA || {};
   S.stop = () => {
     token++;
     if (synth) { try { synth.cancel(); } catch (e) { /* ignore */ } }
+    if (NTTS) NTTS.stop().catch(() => {});
     if (audio) { try { audio.pause(); } catch (e) { /* ignore */ } }
     if (pendingResolve) pendingResolve();
   };
@@ -368,8 +384,32 @@ window.GKA = window.GKA || {};
 
   /* Listen once. Resolves { transcript, alts: [...] } or rejects { code } where code is
      unavailable | no-speech | denied | aborted | network | error. */
+  // In the apps: the phone's speech recognition. Results arrive while the child speaks; a short pause ends the turn.
+  async function listenNative(opts) {
+    let p = await NSR.checkPermissions().catch(() => ({}));
+    if (p.speechRecognition !== "granted") p = await NSR.requestPermissions().catch(() => ({}));
+    if (p.speechRecognition !== "granted") throw { code: "denied" };
+    S.cancelListen(); S.stop();
+    let last = [], lastAt = 0, stopped = false;
+    const subs = [await NSR.addListener("partialResults", (d) => { if (d && d.matches && d.matches.length) { last = d.matches; lastAt = Date.now(); } })];
+    try { subs.push(await NSR.addListener("listeningState", (d) => { if (d && d.status === "stopped") stopped = true; })); } catch (e) { /* older plugin */ }
+    S.listening = true; nativeListening = true;
+    try {
+      const started = NSR.start({ language: opts.lang || "en-US", maxResults: 6, partialResults: true, popup: false }).then((r) => { if (r && r.matches && r.matches.length) { last = r.matches; lastAt = Date.now(); } }, () => { stopped = true; });
+      if (opts.onStart) opts.onStart();
+      const until = Date.now() + (opts.timeoutMs || 7000);
+      while (nativeListening && !stopped && Date.now() < until && !(lastAt && Date.now() - lastAt > 1300)) await new Promise((r) => setTimeout(r, 120));
+      await NSR.stop().catch(() => {}); await Promise.race([started, new Promise((r) => setTimeout(r, 400))]);
+    } finally { subs.forEach((s) => s && s.remove && s.remove()); S.listening = false; }
+    if (!nativeListening) throw { code: "aborted" };
+    nativeListening = false;
+    if (!last.length) throw { code: "no-speech" };
+    return { transcript: last[0], alts: last.slice() };
+  }
+  let nativeListening = false;
   S.listen = (opts) => new Promise((resolve, reject) => {
     opts = opts || {};
+    if (NSR && S.sttOK) return listenNative(opts).then(resolve, (e) => reject(e && e.code ? e : { code: "error" }));
     if (!Rec) return reject({ code: "unavailable" });
     S.cancelListen();
     S.stop();
@@ -395,7 +435,7 @@ window.GKA = window.GKA || {};
     const timer = setTimeout(() => { try { r.stop(); } catch (e) { /* ignore */ } }, opts.timeoutMs || 7000);
     try { S.listening = true; r.start(); if (opts.onStart) opts.onStart(); } catch (e) { settle(reject, { code: "error" }); }
   });
-  S.cancelListen = () => { if (rec) { try { rec.onend = null; rec.onerror = null; rec.abort(); } catch (e) { /* ignore */ } rec = null; } S.listening = false; };
+  S.cancelListen = () => { if (nativeListening) { nativeListening = false; NSR.stop().catch(() => {}); } if (rec) { try { rec.onend = null; rec.onerror = null; rec.abort(); } catch (e) { /* ignore */ } rec = null; } S.listening = false; };
 
   // Short sound effects made with the Web Audio API, so there are no audio files to load.
   let ctx = null;

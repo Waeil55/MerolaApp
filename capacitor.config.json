@@ -1,0 +1,23 @@
+{
+  "appId": "dev.waeil.geniuskids",
+  "appName": "Genius Kids Academy",
+  "webDir": "www",
+  "backgroundColor": "#FFFFFF",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true
+  },
+  "ios": {
+    "contentInset": "never",
+    "scrollEnabled": true,
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "launchAutoHide": true,
+      "backgroundColor": "#1CB0F6",
+      "showSpinner": false
+    }
+  }
+}

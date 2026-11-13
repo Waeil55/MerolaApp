@@ -248,6 +248,7 @@ p { margin: 0; }
 .lesson-top .bar { flex: 1 1 auto; }
 .lesson-top .pill { flex: none; }
 .lesson-head { font-size: clamp(22px, 6.5vw, 28px); font-weight: 900; margin-top: 10px; }
+body[data-route="play"] .lesson-head { padding-right: 86px; text-wrap: balance; } /* room for the Ask button, which sits beside the title during lessons */
 .lesson-meta { font-size: 12px; color: var(--faint); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; margin-top: 4px; }
 .stage { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 16px; min-height: 240px; }
 .stage .label { font-size: 15px; color: var(--muted); text-align: center; }

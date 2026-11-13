@@ -1,0 +1,24 @@
+{
+  "name": "genius-kids-academy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Genius Kids Academy: Reading, Math, Science and Understand for KG to Grade 6, as a website and iPhone and Android apps.",
+  "scripts": {
+    "build:www": "node tools/build-native.js",
+    "sync": "node tools/build-native.js && npx cap sync",
+    "android:debug": "node tools/build-native.js && npx cap sync android && cd android && gradlew.bat assembleDebug",
+    "android:release": "node tools/build-native.js && npx cap sync android && cd android && gradlew.bat bundleRelease"
+  },
+  "dependencies": {
+    "@capacitor-community/speech-recognition": "^7.0.1",
+    "@capacitor-community/text-to-speech": "^8.0.2",
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/ios": "^8.6.2",
+    "@capacitor/splash-screen": "^8.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^4.0.0",
+    "@capacitor/cli": "^8.6.2"
+  }
+}

@@ -4,3 +4,11 @@ Thumbs.db
 
 tools/voice/texts.json
 audio/**/*.tmp
+www/
+android/app/build/
+android/.gradle/
+android/build/
+ios/App/build/
+*.keystore
+*.jks
+keystore.properties
