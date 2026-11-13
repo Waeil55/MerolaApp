@@ -19,6 +19,11 @@ concurrency:
   group: phone-apps-${{ github.ref }}
   cancel-in-progress: true
 
+# "shell: bash" turns on pipefail, so a failed build is not hidden by "| tail".
+defaults:
+  run:
+    shell: bash
+
 jobs:
   ios:
     runs-on: macos-15
