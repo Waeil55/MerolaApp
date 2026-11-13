@@ -142,6 +142,17 @@ The first adds every content file to `index.html`. The second checks that every 
 
 Serve the folder over http or https (not from a file) and the browser offers **Install app** (also on the profile and Parents pages). After the first visit the service worker keeps every file on the device, so the app opens and runs with no internet. `manifest.webmanifest` and `sw.js` hold the setup; run `node tools/build-sw.js` after adding files so the cache list and version stay current, and `node tools/make-icons.js` regenerates the icons.
 
+## iPhone, iPad and Android apps
+
+[Capacitor](https://capacitorjs.com) wraps the same web app as native apps with the id `dev.waeil.geniuskids` (`capacitor.config.json`, folders `android/` and `ios/`).
+
+- `node tools/build-native.js` copies the app files into `www/` (no audio, no service worker), then `npx cap sync` copies them into both apps.
+- Inside the apps, the phone's own voice and speech recognition are used through plugins, recorded lesson clips stream from the website, and Kokoro, the cloud voice check and the service worker are off (see the top of `js/speech.js`).
+- Android: `cd android && ./gradlew bundleRelease` makes the signed `.aab` for Google Play. Signing reads `android/keystore.properties` (never committed), which points to the upload key kept outside the project.
+- iPhone and iPad: `.github/workflows/apps.yml` builds on a cloud Mac with every push. Run it by hand with **upload** ticked to send a build to App Store Connect. It needs the secrets `APPLE_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_P8`.
+- For a new version, raise `versionCode`/`versionName` in `android/app/build.gradle` and `MARKETING_VERSION` in the Xcode project. The iPhone build number comes from the workflow run number.
+- `store/` holds the listing text (`LISTING.md`), the publishing steps (`STORE-STEPS.md`), screenshots and the Play graphics. `privacy.html` is the privacy policy page the stores link to.
+
 ## Deploy
 
 The app is live at **https://waeil55.github.io/MerolaApp/** as an installable web app. GitHub Pages publishes the `main` branch (Settings > Pages > Deploy from a branch, main, root), so every push to `main` updates the site within a minute or two. Run `node tools/build-sw.js` before pushing when files are added, so the offline cache list stays complete. The `.nojekyll` file keeps Pages from touching the files. The folder also runs on Netlify, Vercel or any web server.
